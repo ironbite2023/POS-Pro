@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Database } from '@/lib/supabase/database.types';
@@ -18,35 +18,69 @@ export const useOrderExport = (): UseOrderExportReturn => {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const exportToExcel = (orders: Order[], filename?: string) => {
+  const exportToExcel = async (orders: Order[], filename?: string) => {
     try {
       setExporting(true);
       setError(null);
 
-      // Prepare data for export
-      const exportData = orders.map(order => ({
-        'Order Number': order.order_number,
-        'Date': format(new Date(order.created_at), 'yyyy-MM-dd HH:mm'),
-        'Customer': order.customer_name || 'Guest',
-        'Type': order.order_type,
-        'Status': order.status,
-        'Payment Status': order.payment_status,
-        'Payment Method': order.payment_method || '-',
-        'Subtotal': order.subtotal,
-        'Tax': order.tax_amount,
-        'Total': order.total_amount,
-        'Table': order.table_number || '-',
-        'Phone': order.customer_phone || '-',
-      }));
+      // Create workbook and worksheet
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Orders');
 
-      // Create workbook
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+      // Define columns
+      worksheet.columns = [
+        { header: 'Order Number', key: 'orderNumber', width: 15 },
+        { header: 'Date', key: 'date', width: 20 },
+        { header: 'Customer', key: 'customer', width: 20 },
+        { header: 'Type', key: 'type', width: 12 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Payment Status', key: 'paymentStatus', width: 15 },
+        { header: 'Payment Method', key: 'paymentMethod', width: 15 },
+        { header: 'Subtotal', key: 'subtotal', width: 12 },
+        { header: 'Tax', key: 'tax', width: 10 },
+        { header: 'Total', key: 'total', width: 12 },
+        { header: 'Table', key: 'table', width: 10 },
+        { header: 'Phone', key: 'phone', width: 15 },
+      ];
 
-      // Download file
+      // Add data rows
+      orders.forEach(order => {
+        worksheet.addRow({
+          orderNumber: order.order_number,
+          date: format(new Date(order.created_at), 'yyyy-MM-dd HH:mm'),
+          customer: order.customer_name || 'Guest',
+          type: order.order_type,
+          status: order.status,
+          paymentStatus: order.payment_status,
+          paymentMethod: order.payment_method || '-',
+          subtotal: order.subtotal,
+          tax: order.tax_amount,
+          total: order.total_amount,
+          table: order.table_number || '-',
+          phone: order.customer_phone || '-',
+        });
+      });
+
+      // Style header row
+      worksheet.getRow(1).font = { bold: true };
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+
+      // Generate buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
       const defaultFilename = `orders-${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
-      XLSX.writeFile(wb, filename || defaultFilename);
+      link.download = filename || defaultFilename;
+      link.click();
+      window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error exporting to Excel:', err);
       setError(err as Error);
