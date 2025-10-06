@@ -3,12 +3,21 @@
 import React, { useState, useMemo } from 'react';
 import { Badge, Box, Button, Flex, Select, Table, Text, TextField } from '@radix-ui/themes';
 import { Edit, Plus, Search, X } from 'lucide-react';
-import { mockBranches, regions } from '@/data/BranchData';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/common/Pagination';
 import { SortableHeader } from '@/components/common/SortableHeader';
+import { useAdminData } from '@/hooks/useAdminData';
+
+// Extract unique regions from branches
+const getUniqueRegions = (branches: Array<{ region: string | null }>) => {
+  const regions = branches
+    .map(b => b.region)
+    .filter((region): region is string => region !== null && region !== undefined);
+  return Array.from(new Set(regions));
+};
 
 export default function BranchList({ handleAddBranch }: { handleAddBranch: () => void }) {
+  const { branches, loading } = useAdminData();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [regionFilter, setRegionFilter] = useState('all');
@@ -17,6 +26,8 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const router = useRouter();
+  
+  const regions = getUniqueRegions(branches);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -45,12 +56,12 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
 
   // Filter branches based on search term and filters
   const filteredBranches = useMemo(() => {
-    return mockBranches
+    return branches
       .filter(branch => {
         // Search term filter
         const matchesSearch = 
           branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          branch.region.toLowerCase().includes(searchTerm.toLowerCase());
+          (branch.region && branch.region.toLowerCase().includes(searchTerm.toLowerCase()));
         
         // Status filter
         const matchesStatus = 
@@ -62,19 +73,20 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
         const matchesRegion = regionFilter === 'all' || branch.region === regionFilter;
         
         // Service filter
+        const services = branch.services as { dine_in?: boolean; takeaway?: boolean; delivery?: boolean } | null;
         const matchesService = 
           serviceFilter === 'all' || 
-          (serviceFilter === 'dineIn' && branch.services.dineIn) ||
-          (serviceFilter === 'takeaway' && branch.services.takeaway) ||
-          (serviceFilter === 'delivery' && branch.services.delivery);
+          (serviceFilter === 'dineIn' && services?.dine_in) ||
+          (serviceFilter === 'takeaway' && services?.takeaway) ||
+          (serviceFilter === 'delivery' && services?.delivery);
         
         return matchesSearch && matchesStatus && matchesRegion && matchesService;
       })
       .sort((a, b) => {
         if (!sortConfig) return 0;
 
-        let aValue: any;
-        let bValue: any;
+        let aValue: string | number;
+        let bValue: string | number;
 
         switch (sortConfig.key) {
           case 'name':
@@ -82,16 +94,16 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
             bValue = b.name.toLowerCase();
             break;
           case 'region':
-            aValue = a.region.toLowerCase();
-            bValue = b.region.toLowerCase();
+            aValue = (a.region || '').toLowerCase();
+            bValue = (b.region || '').toLowerCase();
             break;
           case 'status':
-            aValue = a.status.toLowerCase();
-            bValue = b.status.toLowerCase();
+            aValue = (a.status || '').toLowerCase();
+            bValue = (b.status || '').toLowerCase();
             break;
           case 'manager':
-            aValue = a.manager?.name?.toLowerCase() || '';
-            bValue = b.manager?.name?.toLowerCase() || '';
+            aValue = '';
+            bValue = '';
             break;
           default:
             return 0;
@@ -105,7 +117,7 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
         }
         return 0;
       });
-  }, [searchTerm, statusFilter, regionFilter, serviceFilter, sortConfig]);
+  }, [branches, searchTerm, statusFilter, regionFilter, serviceFilter, sortConfig]);
 
   // Pagination
   const totalPages = Math.ceil(filteredBranches.length / itemsPerPage);
@@ -261,39 +273,51 @@ export default function BranchList({ handleAddBranch }: { handleAddBranch: () =>
             </Table.Header>
             
             <Table.Body>
-              {paginatedBranches.length > 0 ? (
-                paginatedBranches.map(branch => (
-                  <Table.Row key={branch.id} className="align-middle cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={() => handleEditBranch(branch.id)}>
-                    <Table.Cell>
-                      <Text weight="medium" as="div">{branch.name}</Text>
-                      <Text size="1" color="gray" as="div">Code: {branch.code}</Text>
-                    </Table.Cell>
-                    <Table.Cell>{branch.region}</Table.Cell>
-                    <Table.Cell>
-                      <Badge color={branch.status === 'active' ? 'green' : 'gray'} size="1" className="capitalize">{branch.status}</Badge>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {branch.manager ? branch.manager.name : 'Unassigned'}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Flex gap="1" wrap="wrap">
-                        {branch.services.dineIn && <Badge color="blue" size="1">Dine-in</Badge>}
-                        {branch.services.takeaway && <Badge color="purple" size="1">Takeaway</Badge>}
-                        {branch.services.delivery && <Badge color="orange" size="1">Delivery</Badge>}
-                      </Flex>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Button 
-                        variant="soft" 
-                        size="1"
-                        onClick={() => handleEditBranch(branch.id)}
-                      >
-                        <Edit size={14} />
-                        Edit
-                      </Button>
-                    </Table.Cell>
-                  </Table.Row>
-                ))
+              {loading ? (
+                <Table.Row>
+                  <Table.Cell colSpan={6}>
+                    <Text align="center" color="gray">Loading branches...</Text>
+                  </Table.Cell>
+                </Table.Row>
+              ) : paginatedBranches.length > 0 ? (
+                paginatedBranches.map(branch => {
+                  const services = branch.services as { dine_in?: boolean; takeaway?: boolean; delivery?: boolean } | null;
+                  return (
+                    <Table.Row key={branch.id} className="align-middle cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={() => handleEditBranch(branch.id)}>
+                      <Table.Cell>
+                        <Text weight="medium" as="div">{branch.name}</Text>
+                        <Text size="1" color="gray" as="div">Code: {branch.code}</Text>
+                      </Table.Cell>
+                      <Table.Cell>{branch.region || '-'}</Table.Cell>
+                      <Table.Cell>
+                        <Badge color={branch.status === 'active' ? 'green' : 'gray'} size="1" className="capitalize">{branch.status || 'inactive'}</Badge>
+                      </Table.Cell>
+                      <Table.Cell>
+                        Unassigned
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Flex gap="1" wrap="wrap">
+                          {services?.dine_in && <Badge color="blue" size="1">Dine-in</Badge>}
+                          {services?.takeaway && <Badge color="purple" size="1">Takeaway</Badge>}
+                          {services?.delivery && <Badge color="orange" size="1">Delivery</Badge>}
+                        </Flex>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Button 
+                          variant="soft" 
+                          size="1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditBranch(branch.id);
+                          }}
+                        >
+                          <Edit size={14} />
+                          Edit
+                        </Button>
+                      </Table.Cell>
+                    </Table.Row>
+                  );
+                })
               ) : (
                 <Table.Row>
                   <Table.Cell colSpan={6}>

@@ -4,8 +4,8 @@ import { Box, Flex } from "@radix-ui/themes";
 import TopBar from "@/components/common/TopBar";
 import Sidebar from "@/components/common/Sidebar";
 import { ReactNode, useCallback, useEffect, useState } from "react";
-import { AppOrganizationProvider } from "@/contexts/AppOrganizationContext";
 import { Text } from "@radix-ui/themes";
+import { ProtectedRoute } from "@/components/common/ProtectedRoute";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }, [onScroll]);
   
   return (
-    <AppOrganizationProvider>
+    <ProtectedRoute>
       <Box className="flex flex-col h-screen overflow-x-hidden">
         {/* Backdrop for mobile */}
         {isSidebarOpen && (
@@ -74,6 +74,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </Box>
         </Box>
       </Box>
-    </AppOrganizationProvider>
+    </ProtectedRoute>
   );
 } 

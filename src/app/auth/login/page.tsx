@@ -6,6 +6,9 @@ import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import Image from 'next/image';
 import { useTheme } from 'next-themes';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   usePageTitle('Login');
@@ -14,18 +17,20 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { theme } = useTheme();
+  const { signIn } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate login process
     try {
-      // Authentication logic would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      window.location.href = '/';
-    } catch (error) {
+      await signIn(email, password);
+      toast.success('Login successful!');
+      router.push('/');
+    } catch (error: any) {
       console.error('Login failed:', error);
+      toast.error(error.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
@@ -133,11 +138,19 @@ export default function LoginPage() {
               </Box>
             </form>
           </Card>
-          <Box className="text-center mt-4">
-            <Link href="/auth/forgot-password" size="1" color="gray">
+          <Flex direction="column" gap="2" className="text-center mt-4">
+            <Link href="/auth/forgot-password" size="2" color="gray">
               Forgot password?
             </Link>
-          </Box>
+            <Box>
+              <Text size="2" color="gray">
+                Don&apos;t have an account?{' '}
+                <Link href="/auth/signup" size="2" weight="medium">
+                  Sign up
+                </Link>
+              </Text>
+            </Box>
+          </Flex>
         </Container>
         
         <Box className="text-center mt-8 mb-4">

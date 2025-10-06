@@ -7,6 +7,8 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { ReactNode, useEffect, useState } from "react";
 import { Theme } from "@radix-ui/themes";
 import { Toaster } from "sonner";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { OrganizationProvider } from "@/contexts/OrganizationContext";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -34,12 +36,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${plusJakartaSans.variable} antialiased`}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="theme">
-          <RadixThemeWrapper>
-            {children}
-            <ThemedToaster />
-          </RadixThemeWrapper>
-        </ThemeProvider>
+        <AuthProvider>
+          <OrganizationProvider>
+            <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="theme">
+              <RadixThemeWrapper>
+                {children}
+                <ThemedToaster />
+              </RadixThemeWrapper>
+            </ThemeProvider>
+          </OrganizationProvider>
+        </AuthProvider>
       </body>
     </html>
   );

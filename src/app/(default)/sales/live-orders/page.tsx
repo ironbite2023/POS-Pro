@@ -1,301 +1,208 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-  Box,
-  Text,
-  Button,
-  Flex,
+import { useState } from 'react';
+import { 
+  Container, 
+  Flex, 
+  Heading, 
+  Button, 
+  Table, 
   Badge,
-  TextField,
-  Select,
-  Table
+  Text,
+  Box,
+  Select
 } from '@radix-ui/themes';
-import { Search, RotateCcw, ChevronRight } from 'lucide-react';
+import { Download, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { liveOrdersData, LiveOrder } from '@/data/LiveOrdersData';
-import Pagination from '@/components/common/Pagination';
-import OrderTimer from '@/components/common/OrderTimer';
-import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
-import { SortableHeader } from '@/components/common/SortableHeader';
-
-const ITEMS_PER_PAGE = 10;
+import { useRealtimeOrders } from '@/hooks/useRealtimeOrders';
+import { ordersService } from '@/lib/services';
+import { useOrderExport } from '@/hooks/useOrderExport';
+import { toast } from 'sonner';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function LiveOrdersPage() {
   usePageTitle('Live Orders');
   const router = useRouter();
-  const [allOrders] = useState<LiveOrder[]>(liveOrdersData);
-  const [filteredOrders, setFilteredOrders] = useState<LiveOrder[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
+  const [statusFilter, setStatusFilter] = useState<string[]>(['new', 'confirmed', 'preparing', 'ready']);
+  const { orders, loading } = useRealtimeOrders(statusFilter);
+  const { exportToExcel, exporting } = useOrderExport();
 
-  useEffect(() => {
-    // Apply filters
-    let filtered = [...allOrders];
-    
-    // Apply search term
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(order => 
-        order.customer.toLowerCase().includes(term) ||
-        order.orderNumber.toLowerCase().includes(term) ||
-        order.id.toLowerCase().includes(term)
-      );
+  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      await ordersService.updateOrderStatus(orderId, newStatus as any);
+      toast.success(`Order status updated to ${newStatus}`);
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      toast.error('Failed to update order status');
     }
-    
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(order => order.status === statusFilter);
-    }
-    
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(order => order.type === typeFilter);
-    }
-
-    // Apply sorting
-    if (sortConfig) {
-      filtered.sort((a, b) => {
-        let aValue = a[sortConfig.key as keyof LiveOrder];
-        let bValue = b[sortConfig.key as keyof LiveOrder];
-
-        if (sortConfig.key === 'total') {
-          aValue = a.total;
-          bValue = b.total;
-        } else if (sortConfig.key === 'items') {
-          aValue = a.items.length;
-          bValue = b.items.length;
-        }
-
-        if (aValue < bValue) {
-          return sortConfig.direction === 'asc' ? -1 : 1;
-        }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'asc' ? 1 : -1;
-        }
-        return 0;
-      });
-    }
-    
-    setFilteredOrders(filtered);
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, typeFilter, sortConfig, allOrders]);
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, filteredOrders.length);
-  const currentItems = filteredOrders.slice(startIndex, endIndex);
-
-  // Navigate to order details
-  const navigateToOrderDetails = (orderId: string) => {
-    router.push(`/sales/live-orders/${orderId}`);
   };
 
-  // Reset all filters
-  const handleResetFilters = () => {
-    setSearchTerm('');
-    setStatusFilter('all');
-    setTypeFilter('all');
-  };
-
-  // Get status badge color
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): 'yellow' | 'blue' | 'green' | 'gray' | 'red' => {
     switch (status) {
-      case 'new': return 'blue';
-      case 'preparing': return 'yellow';
-      case 'cooking': return 'orange';
+      case 'new':
+      case 'pending': return 'yellow';
+      case 'confirmed':
+      case 'preparing': return 'blue';
       case 'ready': return 'green';
-      case 'completed': return 'green';
+      case 'completed': return 'gray';
       case 'cancelled': return 'red';
       default: return 'gray';
     }
   };
 
-  const handleSort = (key: string) => {
-    let direction: 'asc' | 'desc' = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
+  const handleExport = () => {
+    exportToExcel(orders, 'live-orders.xlsx');
+  };
+
+  const handleFilterChange = (value: string) => {
+    const filterMap: Record<string, string[]> = {
+      'active': ['new', 'confirmed', 'preparing', 'ready'],
+      'completed': ['completed'],
+      'cancelled': ['cancelled'],
+      'all': ['new', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']
+    };
+    setStatusFilter(filterMap[value] || filterMap['active']);
   };
 
   return (
-    <Box className="space-y-4">
-      <Flex justify="between" align="start" mb="5">
-        <PageHeading title="Live Orders" description="View and manage all current orders" noMarginBottom />
-      </Flex>
-
-      <Box>
-        <Flex gap="4" align="center" wrap="wrap">
-          <Box className="flex-grow min-w-[250px]">
-            <TextField.Root
-              placeholder="Search by order # or customer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            >
-              <TextField.Slot>
-                <Search size={16} />
-              </TextField.Slot>
-            </TextField.Root>
+    <Container size="4">
+      <Flex direction="column" gap="6">
+        {/* Header */}
+        <Flex justify="between" align="center">
+          <Box>
+            <Heading size="7">Live Orders</Heading>
+            <Text size="2" color="gray">{orders.length} orders</Text>
           </Box>
-
-          <Flex align="center" gap="2" className="flex-shrink-0">
-            <Select.Root value={statusFilter} onValueChange={setStatusFilter}>
-              <Select.Trigger placeholder="All Statuses" />
+          
+          <Flex gap="2">
+            <Select.Root
+              value="active"
+              onValueChange={handleFilterChange}
+            >
+              <Select.Trigger />
               <Select.Content>
-                <Select.Item value="all">All Statuses</Select.Item>
-                <Select.Item value="new">New</Select.Item>
-                <Select.Item value="preparing">Preparing</Select.Item>
-                <Select.Item value="cooking">Cooking</Select.Item>
-                <Select.Item value="ready">Ready</Select.Item>
-                <Select.Item value="completed">Completed</Select.Item>
-                <Select.Item value="cancelled">Cancelled</Select.Item>
+                <Select.Item value="active">Active Orders</Select.Item>
+                <Select.Item value="completed">Completed Only</Select.Item>
+                <Select.Item value="cancelled">Cancelled Only</Select.Item>
+                <Select.Item value="all">All Orders</Select.Item>
               </Select.Content>
             </Select.Root>
-          </Flex>
 
-          <Flex align="center" gap="2" className="flex-shrink-0">
-            <Select.Root value={typeFilter} onValueChange={setTypeFilter}>
-              <Select.Trigger placeholder="All Types" />
-              <Select.Content>
-                <Select.Item value="all">All Types</Select.Item>
-                <Select.Item value="Dine-in">Dine-in</Select.Item>
-                <Select.Item value="Takeout">Takeout</Select.Item>
-                <Select.Item value="Delivery">Delivery</Select.Item>
-              </Select.Content>
-            </Select.Root>
+            <Button 
+              variant="outline" 
+              onClick={handleExport}
+              disabled={exporting || orders.length === 0}
+            >
+              <Download size={16} />
+              Export
+            </Button>
           </Flex>
-
-          <Button variant="soft" color={statusFilter !== 'all' || typeFilter !== 'all' ? 'red' : 'gray'} onClick={handleResetFilters}>
-            <RotateCcw size={16} />
-            Reset Filters
-          </Button>
         </Flex>
-      </Box>
 
-      <Table.Root variant="surface">
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Order #"
-                sortKey="orderNumber"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Customer"
-                sortKey="customer"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Type"
-                sortKey="type"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Items"
-                sortKey="items"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Total"
-                sortKey="total"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Status"
-                sortKey="status"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-
-        <Table.Body>
-          {currentItems.map((order) => (
-            <Table.Row key={order.id} className="hover:bg-slate-50 dark:hover:bg-neutral-800 cursor-pointer" onClick={() => navigateToOrderDetails(order.id)}>
-              <Table.Cell>
-                <Text weight="bold">#{order.orderNumber}</Text>
-              </Table.Cell>
-              <Table.Cell>{order.customer}</Table.Cell>
-              <Table.Cell>
-                <Flex align="center" gap="1">
-                  {order.type === 'Dine-in' ? (
-                    <Text size="2">Table {order.table}</Text>
-                  ) : (
-                    <Text size="2">{order.type}</Text>
-                  )}
-                </Flex>
-              </Table.Cell>
-              <Table.Cell>{order.items.length}</Table.Cell>
-              <Table.Cell>${order.total.toFixed(2)}</Table.Cell>
-              <Table.Cell>
-                <Badge color={getStatusColor(order.status)} className="capitalize">
-                  {order.status}
-                </Badge>
-              </Table.Cell>
-              <Table.Cell>
-                <OrderTimer 
-                  timeReceived={order.timeReceived} 
-                  isCompleted={order.isCompleted}
-                  color={order.isCompleted ? "green" : undefined}
-                />
-              </Table.Cell>
-              <Table.Cell>
-                <Button size="1" onClick={(e) => {
-                  e.stopPropagation();
-                  navigateToOrderDetails(order.id);
-                }}>
-                  View
-                  <ChevronRight size={14} />
-                </Button>
-              </Table.Cell>
-            </Table.Row>
-          ))}
-        </Table.Body>
-      </Table.Root>
-
-      {filteredOrders.length > 0 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          itemsPerPage={itemsPerPage}
-          totalItems={filteredOrders.length}
-          startIndex={startIndex}
-          endIndex={endIndex}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(newSize) => {
-            setItemsPerPage(newSize);
-            setCurrentPage(1);
-          }}
-        />
-      )}
-    </Box>
+        {/* Orders Table */}
+        {loading ? (
+          <Box className="text-center py-12">
+            <Text>Loading live orders...</Text>
+          </Box>
+        ) : orders.length === 0 ? (
+          <Box className="text-center py-12">
+            <Text size="3" color="gray">No orders found for selected filters</Text>
+          </Box>
+        ) : (
+          <Table.Root variant="surface">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Order #</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Items</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Total</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {orders.map(order => {
+                const timeAgo = formatDistanceToNow(new Date(order.created_at), { addSuffix: true });
+                
+                return (
+                  <Table.Row key={order.id}>
+                    <Table.Cell>
+                      <Text weight="medium">{order.order_number}</Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Box>
+                        <Text>{order.customer_name || 'Guest'}</Text>
+                        {order.table_number && (
+                          <Text size="1" color="gray" className="block">Table {order.table_number}</Text>
+                        )}
+                      </Box>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge variant="soft">{order.order_type}</Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text>{order.items?.length || 0} items</Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text weight="medium">${order.total_amount.toFixed(2)}</Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge color={getStatusColor(order.status)}>
+                        {order.status}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="2" color="gray">{timeAgo}</Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Flex gap="1">
+                        <Button
+                          size="1"
+                          variant="soft"
+                          onClick={() => router.push(`/sales/live-orders/${order.id}`)}
+                        >
+                          <Eye size={14} />
+                          View
+                        </Button>
+                        
+                        {order.status === 'new' && (
+                          <Button
+                            size="1"
+                            onClick={() => handleStatusUpdate(order.id, 'preparing')}
+                          >
+                            Start
+                          </Button>
+                        )}
+                        {order.status === 'preparing' && (
+                          <Button
+                            size="1"
+                            color="green"
+                            onClick={() => handleStatusUpdate(order.id, 'ready')}
+                          >
+                            Ready
+                          </Button>
+                        )}
+                        {order.status === 'ready' && (
+                          <Button
+                            size="1"
+                            variant="outline"
+                            onClick={() => handleStatusUpdate(order.id, 'completed')}
+                          >
+                            Complete
+                          </Button>
+                        )}
+                      </Flex>
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })}
+            </Table.Body>
+          </Table.Root>
+        )}
+      </Flex>
+    </Container>
   );
 }

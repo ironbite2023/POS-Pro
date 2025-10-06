@@ -3,14 +3,14 @@
 import React, { useState, useMemo } from 'react';
 import { Badge, Box, Button, Flex, Select, Table, Text, TextField, IconButton } from '@radix-ui/themes';
 import { Edit, Search, RefreshCcw } from 'lucide-react';
-import { mockUsers, roles } from '@/data/UserData';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/common/Pagination';
-import { mockBranches } from '@/data/BranchData';
 import { formatDistanceToNow } from 'date-fns';
 import { SortableHeader } from '@/components/common/SortableHeader';
+import { useAdminData } from '@/hooks/useAdminData';
 
 export default function UserList() {
+  const { staff, branches, roles, loading } = useAdminData();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [branchFilter, setBranchFilter] = useState('all');
@@ -57,18 +57,21 @@ export default function UserList() {
 
   // Filter users based on search term and filters
   const filteredUsers = useMemo(() => {
-    return mockUsers
+    return staff
       .filter(user => {
+        const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+        
         // Search term filter (name or email)
         const matchesSearch = 
-          user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           user.email.toLowerCase().includes(searchTerm.toLowerCase());
         
         // Role filter
-        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+        const matchesRole = roleFilter === 'all' || user.role_id === roleFilter;
         
         // Branch filter
-        const matchesBranch = branchFilter === 'all' || user.branches.includes(branchFilter);
+        const matchesBranch = branchFilter === 'all' || 
+          (user.branch_access && user.branch_access.includes(branchFilter));
         
         // Status filter
         const matchesStatus = 
@@ -81,29 +84,29 @@ export default function UserList() {
       .sort((a, b) => {
         if (!sortConfig) return 0;
 
-        let aValue: any;
-        let bValue: any;
+        let aValue: string | number;
+        let bValue: string | number;
 
         switch (sortConfig.key) {
           case 'name':
-            aValue = a.name.toLowerCase();
-            bValue = b.name.toLowerCase();
+            aValue = `${a.first_name || ''} ${a.last_name || ''}`.toLowerCase();
+            bValue = `${b.first_name || ''} ${b.last_name || ''}`.toLowerCase();
             break;
           case 'email':
             aValue = a.email.toLowerCase();
             bValue = b.email.toLowerCase();
             break;
           case 'role':
-            aValue = a.role.toLowerCase();
-            bValue = b.role.toLowerCase();
+            aValue = a.role_id || '';
+            bValue = b.role_id || '';
             break;
           case 'status':
-            aValue = a.status.toLowerCase();
-            bValue = b.status.toLowerCase();
+            aValue = (a.status || '').toLowerCase();
+            bValue = (b.status || '').toLowerCase();
             break;
           case 'lastActive':
-            aValue = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-            bValue = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+            aValue = a.last_login ? new Date(a.last_login).getTime() : 0;
+            bValue = b.last_login ? new Date(b.last_login).getTime() : 0;
             break;
           default:
             return 0;
@@ -117,7 +120,7 @@ export default function UserList() {
         }
         return 0;
       });
-  }, [searchTerm, roleFilter, branchFilter, statusFilter, sortConfig]);
+  }, [staff, searchTerm, roleFilter, branchFilter, statusFilter, sortConfig]);
 
   // Pagination
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
@@ -131,19 +134,26 @@ export default function UserList() {
   };
 
   // Get branch names for a user
-  const getBranchNames = (branchIds: string[]) => {
-    if (!branchIds.length) return 'None';
+  const getBranchNames = (branchIds: string[] | null) => {
+    if (!branchIds || !branchIds.length) return 'None';
     
-    const branches = branchIds.map(id => {
-      const branch = mockBranches.find(b => b.id === id);
+    const branchNames = branchIds.map(id => {
+      const branch = branches.find(b => b.id === id);
       return branch ? branch.name : 'Unknown';
     });
     
-    if (branches.length > 2) {
-      return `${branches[0]}, ${branches[1]} +${branches.length - 2}`;
+    if (branchNames.length > 2) {
+      return `${branchNames[0]}, ${branchNames[1]} +${branchNames.length - 2}`;
     }
     
-    return branches.join(', ');
+    return branchNames.join(', ');
+  };
+
+  // Get role name by role ID
+  const getRoleName = (roleId: string | null) => {
+    if (!roleId) return 'No Role';
+    const role = roles.find(r => r.id === roleId);
+    return role ? role.name : 'Unknown';
   };
 
   return (
@@ -182,7 +192,7 @@ export default function UserList() {
                 <Select.Content>
                   <Select.Item value="all">All Roles</Select.Item>
                   {roles.map(role => (
-                    <Select.Item key={role.id} value={role.name}>{role.name}</Select.Item>
+                    <Select.Item key={role.id} value={role.id}>{role.name}</Select.Item>
                   ))}
                 </Select.Content>
               </Select.Root>
@@ -196,7 +206,7 @@ export default function UserList() {
                 <Select.Trigger placeholder="Branch" />
                 <Select.Content>
                   <Select.Item value="all">All Branches</Select.Item>
-                  {mockBranches.map(branch => (
+                  {branches.map(branch => (
                     <Select.Item key={branch.id} value={branch.id}>{branch.name}</Select.Item>
                   ))}
                 </Select.Content>
@@ -279,20 +289,26 @@ export default function UserList() {
           </Table.Header>
           
           <Table.Body>
-            {paginatedUsers.length > 0 ? (
+            {loading ? (
+              <Table.Row>
+                <Table.Cell colSpan={7}>
+                  <Text align="center" color="gray">Loading users...</Text>
+                </Table.Cell>
+              </Table.Row>
+            ) : paginatedUsers.length > 0 ? (
               paginatedUsers.map(user => (
                 <Table.Row key={user.id} className="cursor-pointer align-middle hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={() => handleEditUser(user.id)}>
                   <Table.Cell>
-                    <Text weight="medium" as="div">{user.name}</Text>
+                    <Text weight="medium" as="div">{user.first_name} {user.last_name}</Text>
                   </Table.Cell>
                   <Table.Cell>{user.email}</Table.Cell>
-                  <Table.Cell>{user.role}</Table.Cell>
-                  <Table.Cell>{getBranchNames(user.branches)}</Table.Cell>
+                  <Table.Cell>{getRoleName(user.role_id)}</Table.Cell>
+                  <Table.Cell>{getBranchNames(user.branch_access)}</Table.Cell>
                   <Table.Cell>
-                    <Badge color={user.status === 'active' ? 'green' : 'red'} size="1" className="capitalize">{user.status}</Badge>
+                    <Badge color={user.status === 'active' ? 'green' : 'red'} size="1" className="capitalize">{user.status || 'inactive'}</Badge>
                   </Table.Cell>
                   <Table.Cell>
-                    <Text size="2" color="gray">{formatLastActive(user.lastActive)}</Text>
+                    <Text size="2" color="gray">{formatLastActive(user.last_login)}</Text>
                   </Table.Cell>
                   <Table.Cell>
                     <Flex gap="3" justify="center">

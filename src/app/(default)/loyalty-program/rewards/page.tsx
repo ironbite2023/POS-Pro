@@ -13,8 +13,9 @@ import {
   Text,
   Badge,
   IconButton,
+  Callout,
 } from "@radix-ui/themes";
-import { Search, Plus, ImageIcon, RefreshCcw, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, ImageIcon, RefreshCcw, Edit, Trash2, Info } from "lucide-react";
 import { mockLoyaltyRewards } from '@/data/LoyaltyRewardsData';
 import { RewardStatus } from '@/types/loyalty';
 import { organization } from '@/data/CommonData';
@@ -25,6 +26,7 @@ import { useRouter } from 'next/navigation';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { SortableHeader } from '@/components/common/SortableHeader';
+import { useOrganization } from '@/contexts/OrganizationContext';
 
 const branches = organization.filter(org => org.id !== 'hq');
 
@@ -46,7 +48,7 @@ const formatBranchScope = (scope: 'All' | string[]): string => {
        const branch = branches.find(b => b.id === scope[0]);
        return branch ? branch.name : scope[0];
     }
-    return `${scope.length} Branches`; // Consider showing names in a tooltip if needed
+    return `${scope.length} Branches`;
   }
   return "Unknown";
 };
@@ -64,17 +66,19 @@ const getStatusColor = (status: RewardStatus): React.ComponentProps<typeof Badge
 export default function RewardsPage() {
   usePageTitle('Loyalty Rewards');
   const router = useRouter();
+  const { currentOrganization } = useOrganization();
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'Active', 'Inactive', 'Expired', 'Draft'
-  const [typeFilter, setTypeFilter] = useState<string>('all'); // 'all', 'Free Item', '% Discount', 'Cashback'
-  const [branchFilter, setBranchFilter] = useState<string>('all'); // 'all', specific branch id
-  const [tierFilter, setTierFilter] = useState<string>('all'); // 'all', specific tier id
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [tierFilter, setTierFilter] = useState<string>('all');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // Default items per page
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Note: Using mock data until rewards API is implemented in backend
   const rewards = mockLoyaltyRewards;
 
   const handleSort = (key: string) => {
@@ -86,7 +90,6 @@ export default function RewardsPage() {
   };
 
   const filteredRewards = useMemo(() => {
-    // Reset to page 1 when filters change
     setCurrentPage(1);
     let filtered = rewards.filter(reward => {
       const matchesSearch = reward.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -101,7 +104,6 @@ export default function RewardsPage() {
       return matchesSearch && matchesStatus && matchesType && matchesBranch && matchesTier;
     });
 
-    // Apply sorting
     if (sortConfig) {
       filtered.sort((a, b) => {
         let aValue: any;
@@ -149,7 +151,6 @@ export default function RewardsPage() {
     return filtered;
   }, [rewards, searchTerm, statusFilter, typeFilter, branchFilter, tierFilter, sortConfig]);
 
-  // Pagination Calculations
   const totalItems = filteredRewards.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -162,7 +163,7 @@ export default function RewardsPage() {
 
   const handleItemsPerPageChange = (value: number) => {
     setItemsPerPage(value);
-    setCurrentPage(1); // Reset to page 1 when items per page changes
+    setCurrentPage(1);
   };
 
   const handleDisable = (rewardId: string) => {
@@ -183,6 +184,18 @@ export default function RewardsPage() {
 
   return (
     <Box className="space-y-4">
+      {/* Info Banner */}
+      {currentOrganization && (
+        <Callout.Root color="blue">
+          <Callout.Icon>
+            <Info size={16} />
+          </Callout.Icon>
+          <Callout.Text>
+            Rewards management is currently using sample data. Backend API integration for rewards catalog is coming soon.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
       {/* Filters and Search */}
       <Flex direction="column" gap="5" mb="5">
         <Flex 
