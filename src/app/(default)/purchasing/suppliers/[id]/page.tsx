@@ -3,16 +3,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import SupplierDetails from '@/components/purchasing/supplier/SupplierDetails';
-import { Supplier } from '@/types/inventory';
-import { mockSuppliers } from '@/data/SupplierData';
+// Removed hardcoded import - using real suppliers from database
+// eslint-disable-next-line unused-imports/no-unused-imports
+import { suppliersService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { Text } from '@radix-ui/themes';
 import { toast } from 'sonner';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function SupplierDetailPage() {
   usePageTitle('Edit Supplier');
   const router = useRouter();
   const params = useParams();
+  const { currentOrganization } = useOrganization();
   const supplierId = params.id as string;
 
   const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -20,18 +26,31 @@ export default function SupplierDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    // Simulate fetching the supplier data
-    const fetchedSupplier = mockSuppliers.find(s => s.id === supplierId);
+    const loadSupplier = async () => {
+      if (!currentOrganization) return;
+      
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // TODO: Implement suppliersService.getSupplierById method
+        // const fetchedSupplier = await suppliersService.getSupplierById(supplierId);
+        // setSupplier(fetchedSupplier);
+        
+        // Temporary: Return null until service is implemented
+        setSupplier(null);
+        setError(`Supplier loading not yet implemented. Supplier ID: ${supplierId}`);
+      } catch (error) {
+        console.error('Error loading supplier:', error);
+        setError(`Error loading supplier: ${error}`);
+        setSupplier(null);
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    if (fetchedSupplier) {
-      setSupplier(fetchedSupplier);
-    } else {
-      setError(`Supplier with ID ${supplierId} not found.`);
-    }
-    setLoading(false);
-  }, [supplierId]);
+    loadSupplier();
+  }, [supplierId, currentOrganization]);
 
   const handleUpdateItem = (updatedSupplier: Supplier) => {
     // Implement API call to update the supplier

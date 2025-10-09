@@ -2,24 +2,17 @@
 
 import { useState } from "react";
 import { TextField, Button, Table, Select, Flex, Box, IconButton } from "@radix-ui/themes";
-import { ingredientItems } from "@/data/IngredientItemsData";
-import { recipes } from "@/data/RecipesData";
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { inventoryService, menuService } from '@/lib/services';
 import Pagination from "@/components/common/Pagination";
 import Image from "next/image";
 import { NotepadText, Plus, Edit, Trash2 } from "lucide-react";
 import { Recipe } from "@/types/inventory";
-import { recipeCategories } from "@/data/CommonData";
+// Removed hardcoded recipe categories - will use menu categories from database
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { PageHeading } from "@/components/common/PageHeading";
 import { SortableHeader } from "@/components/common/SortableHeader";
-
-// Helper function to get ingredient names from IDs
-const getIngredientNames = (ingredientIds: { id: string; amount: number }[]) => {
-  return ingredientIds.map(item => {
-    const ingredient = ingredientItems.find(ing => ing.id === item.id);
-    return ingredient ? `${ingredient.name} (${item.amount}${ingredient.ingredientUnit})` : "";
-  }).join(", ");
-};
 
 // Number of items per page
 const ITEMS_PER_PAGE = 10;
@@ -37,6 +30,13 @@ const RecipeList = ({ onRecipeClick, onAddRecipe }: RecipeListProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [recipeToDelete, setRecipeToDelete] = useState<Recipe | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  
+  // TODO: Implement recipe data fetching from database
+  // For now, using empty array until recipe database schema is implemented
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  
+  // TODO: Load recipe categories from database - for now using placeholder
+  const recipeCategories = ['Appetizers', 'Main Course', 'Desserts', 'Beverages', 'Sides'];
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';

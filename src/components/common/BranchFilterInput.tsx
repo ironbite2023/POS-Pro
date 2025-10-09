@@ -1,5 +1,5 @@
 import { Flex, Select, Text, Button } from '@radix-ui/themes';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { Store, X } from 'lucide-react';
 
 interface BranchFilterInputProps {
@@ -9,6 +9,8 @@ interface BranchFilterInputProps {
 }
 
 export default function BranchFilterInput({ selectedBranch, setSelectedBranch, clearFilter }: BranchFilterInputProps) {
+  const { branches } = useOrganization();
+
   return (
     <Flex align="center" gap="2">
       <Text size="2">Filter by branch:</Text>
@@ -18,11 +20,11 @@ export default function BranchFilterInput({ selectedBranch, setSelectedBranch, c
       >
         <Select.Trigger placeholder="Select Branch" variant="soft" />
         <Select.Content>
-          {organization.filter(entity => entity.id !== "hq").map((entity) => (
-            <Select.Item key={entity.id} value={entity.id}>
+          {branches.map((branch) => (
+            <Select.Item key={branch.id} value={branch.id}>
               <Flex align="center" gap="2"> 
                 <Store size={14} />
-                {entity.name}
+                {branch.name}
               </Flex>
             </Select.Item>
           ))}

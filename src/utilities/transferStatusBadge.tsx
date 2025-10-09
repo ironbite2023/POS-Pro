@@ -1,6 +1,7 @@
 import { Badge } from "@radix-ui/themes";
+import { TransferStatus } from "@/types/inventory";
 
-export const getTransferStatusBadge  = ({ status }) => {
+export const getTransferStatusBadge = ({ status }: { status: TransferStatus }) => {
   switch (status) {
     case 'New': return <Badge color="blue">New</Badge>;
     case 'Rejected': return <Badge color="red">Rejected</Badge>;

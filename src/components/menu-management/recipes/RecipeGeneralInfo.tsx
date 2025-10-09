@@ -14,8 +14,12 @@ import {
 } from '@radix-ui/themes';
 import { Recipe } from '@/types/inventory';
 import { formatCurrency } from '@/utilities';
-import { recipeCategories } from '@/data/CommonData';
+// Removed hardcoded import - using real menu categories from database
+import { menuService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import Image from 'next/image';
+import { useState, useEffect } from 'react';
+
 interface RecipeGeneralInfoProps {
   recipe: Recipe;
   updateRecipe: (data: Partial<Recipe>) => void;
@@ -27,6 +31,27 @@ const RecipeGeneralInfo: React.FC<RecipeGeneralInfoProps> = ({
   updateRecipe,
   isEditing
 }) => {
+  const { currentOrganization } = useOrganization();
+  const [recipeCategories, setRecipeCategories] = useState<string[]>([]);
+
+  // Load menu categories to use as recipe categories
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const dbCategories = await menuService.getCategories(currentOrganization.id);
+        // Use menu category names as recipe category options
+        setRecipeCategories(dbCategories.map(cat => cat.name));
+      } catch (error) {
+        console.error('Error loading categories for recipes:', error);
+        // Fallback to default recipe categories
+        setRecipeCategories(['Appetizers', 'Main Course', 'Desserts', 'Beverages', 'Sides']);
+      }
+    };
+
+    loadCategories();
+  }, [currentOrganization]);
   const handleChange = (field: keyof Recipe) => (e: React.ChangeEvent<HTMLInputElement>) => {
     updateRecipe({ [field]: e.target.value });
   };

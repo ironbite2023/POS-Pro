@@ -41,9 +41,13 @@ const getSupabaseClient = (): SupabaseClient<Database> => {
  */
 const getSupabaseAdmin = (): SupabaseClient<Database> => {
   if (!supabaseAdminInstance) {
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                          process.env.SUPABASE_SERVICE_ROLE_KEY || 
+                          'placeholder-key';
+                          
     supabaseAdminInstance = createClient<Database>(
-      supabaseUrl || 'https://placeholder.supabase.co',
-      process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key',
+      supabaseUrl,
+      serviceRoleKey,
       {
         auth: {
           persistSession: false,

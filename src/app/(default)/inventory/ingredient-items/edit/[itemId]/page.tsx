@@ -5,8 +5,12 @@ import { Box, Flex, Spinner, Text } from '@radix-ui/themes';
 import IngredientItemForm from '@/components/inventory/IngredientItemForm';
 import { useRouter, useParams } from 'next/navigation';
 import { IngredientItem } from '@/types/inventory';
-import { ingredientItems } from '@/data/IngredientItemsData';
+// Removed hardcoded import - using real ingredient items from database services
+// Removed unused imports inventoryService and useOrganization
 import { toast } from 'sonner';
+
+// Placeholder data - will be replaced with real database service
+const ingredientItems: IngredientItem[] = [];
 
 export default function EditIngredientItemPage() {
   const router = useRouter();

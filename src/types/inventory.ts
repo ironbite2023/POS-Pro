@@ -21,6 +21,97 @@ export type StockStatus = 'In Stock' | 'Low Stock' | 'Out of Stock';
 
 export type UnitOfMeasure = 'kg' | 'g' | 'l' | 'ml' | 'units' | 'pcs';
 
+// Comprehensive Stock Request System Types
+export type StockRequestStatus = 'New' | 'Pending' | 'Approved' | 'Rejected' | 'Completed' | 'Cancelled';
+
+export interface StockRequestFormData {
+  id?: string;
+  requestNumber: string;
+  originId: string;
+  destinationId: string;
+  date: Date;
+  requiredDate?: Date;
+  status: StockRequestStatus;
+  notes?: string;
+  items: StockRequestItemData[];
+  createdBy?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface StockRequestItemData {
+  id: string;
+  stockRequestId?: string;
+  inventoryItemId: string;
+  inventoryItemName: string;
+  quantityRequested: number;
+  quantityApproved?: number;
+  unit: string;
+  priority: 'low' | 'medium' | 'high';
+  notes?: string;
+  availableStock?: number;
+  estimatedCost?: number;
+}
+
+// Stock Transfer System Types  
+export type TransferStatus = 'New' | 'Rejected' | 'Approved' | 'Delivering' | 'Completed';
+
+export interface StockTransferLog {
+  id: string;
+  transferNumber: string;
+  originId: string;
+  destinationId: string;
+  status: TransferStatus;
+  dateCreated: string;
+  dateReceived?: string;
+  hasDiscrepancies: boolean;
+  createdBy?: string;
+  approvedBy?: string;
+  items?: StockTransferItemData[];
+  notes?: string;
+  totalItems?: number;
+  organization_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StockTransferItemData {
+  id: string;
+  ingredientItemId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: UnitOfMeasure;
+  receivedQuantity?: number;
+  notes?: string;
+  discrepancy?: boolean;
+  discrepancyReason?: string;
+}
+
+// Sortable Data Types for Tables
+export interface SortConfig<T> {
+  key: keyof T;
+  direction: 'asc' | 'desc';
+}
+
+export type SortableStockRequestField = keyof StockRequestFormData;
+export type SortableTransferLogField = keyof StockTransferLog;
+export type SortableInventoryField = keyof StockItem;
+
+// Form Error Types
+export interface FormErrors {
+  [key: string]: string;
+}
+
+export interface StockRequestFormErrors {
+  requestNumber?: string;
+  originId?: string;
+  destinationId?: string;
+  date?: string;
+  items?: string;
+  [key: `item-${number}`]: string;
+  [key: `quantity-${number}`]: string;
+}
+
 export interface IngredientItem {
   id: string;
   name: string;

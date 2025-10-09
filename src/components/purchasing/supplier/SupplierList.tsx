@@ -3,8 +3,13 @@
 import { useState, useMemo } from 'react';
 import { Table, Box, TextField, Select, Flex, Text, Button, Badge, Callout } from '@radix-ui/themes';
 import { SearchIcon, FilterIcon, RefreshCcw, ChevronRight } from 'lucide-react';
-import { mockSuppliers } from '@/data/SupplierData';
-import { ingredientItemCategories } from '@/data/CommonData';
+// Removed hardcoded imports - using real data from database services
+import { suppliersService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import { formatDate } from '@/utilities';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/common/Pagination';
@@ -16,8 +21,41 @@ const ITEMS_PER_PAGE = 10;
 
 export default function SupplierList() {
   const router = useRouter();
+  const { currentOrganization } = useOrganization();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Supplier categories for filtering
+  const supplierCategories = [
+    'Food & Beverage',
+    'Equipment', 
+    'Packaging',
+    'Cleaning Supplies',
+    'Utilities',
+    'Professional Services',
+    'Other'
+  ];
+
+  // Load suppliers from database
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      if (!currentOrganization) return;
+
+      try {
+        setLoading(true);
+        const data = await suppliersService.getSuppliers(currentOrganization.id);
+        setSuppliers(data);
+      } catch (error) {
+        console.error('Error loading suppliers:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSuppliers();
+  }, [currentOrganization]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
@@ -33,20 +71,20 @@ export default function SupplierList() {
   };
 
   const filteredSuppliers = useMemo(() => {
-    return mockSuppliers
+    return suppliers
       .filter(supplier => {
         const matchesSearch = 
           supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (supplier.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
           supplier.email.toLowerCase().includes(searchTerm.toLowerCase());
         
-        const matchesCategory = filterCategory === 'all' || supplier.category === filterCategory;
+        const matchesCategory = filterCategory === 'all'; // TODO: Implement category filtering when suppliers have categories
         
         // Apply advanced filters if they exist
         let matchesAdvancedFilters = true;
         if (advancedFilters) {
           // Check for various advanced filters
-          if (advancedFilters.contactPerson && !supplier.contactPerson.toLowerCase().includes(advancedFilters.contactPerson.toLowerCase())) {
+          if (advancedFilters.contactPerson && !(supplier.contact_name || '').toLowerCase().includes(advancedFilters.contactPerson.toLowerCase())) {
             matchesAdvancedFilters = false;
           }
           if (advancedFilters.email && !supplier.email.toLowerCase().includes(advancedFilters.email.toLowerCase())) {
@@ -55,29 +93,27 @@ export default function SupplierList() {
           if (advancedFilters.phone && !supplier.phone.toLowerCase().includes(advancedFilters.phone.toLowerCase())) {
             matchesAdvancedFilters = false;
           }
-          if (advancedFilters.address && !supplier.address.toLowerCase().includes(advancedFilters.address.toLowerCase())) {
+          if (advancedFilters.address && !(typeof supplier.address === 'string' ? supplier.address : JSON.stringify(supplier.address || '')).toLowerCase().includes(advancedFilters.address.toLowerCase())) {
             matchesAdvancedFilters = false;
           }
-          if (advancedFilters.minOrders !== null && supplier.totalOrders < advancedFilters.minOrders) {
-            matchesAdvancedFilters = false;
+          // TODO: Implement order count filtering when purchase order relationships are established
+          if (advancedFilters.minOrders !== null) {
+            // matchesAdvancedFilters = supplier.total_orders < advancedFilters.minOrders ? false : matchesAdvancedFilters;
           }
-          if (advancedFilters.maxOrders !== null && supplier.totalOrders > advancedFilters.maxOrders) {
-            matchesAdvancedFilters = false;
+          if (advancedFilters.maxOrders !== null) {
+            // matchesAdvancedFilters = supplier.total_orders > advancedFilters.maxOrders ? false : matchesAdvancedFilters;
           }
+          // TODO: Implement last order date filtering when purchase order relationships are established
           if (advancedFilters.orderDateFrom) {
-            const fromDate = new Date(advancedFilters.orderDateFrom);
-            if (supplier.lastOrderDate < fromDate) {
-              matchesAdvancedFilters = false;
-            }
+            // const fromDate = new Date(advancedFilters.orderDateFrom);
+            // if (supplier.last_order_date < fromDate) matchesAdvancedFilters = false;
           }
           if (advancedFilters.orderDateTo) {
-            const toDate = new Date(advancedFilters.orderDateTo);
-            toDate.setHours(23, 59, 59, 999); // End of the day
-            if (supplier.lastOrderDate > toDate) {
-              matchesAdvancedFilters = false;
-            }
+            // const toDate = new Date(advancedFilters.orderDateTo);
+            // toDate.setHours(23, 59, 59, 999); // End of the day
+            // if (supplier.last_order_date > toDate) matchesAdvancedFilters = false;
           }
-          if (advancedFilters.active !== null && supplier.active !== advancedFilters.active) {
+          if (advancedFilters.active !== null && supplier.is_active !== advancedFilters.active) {
             matchesAdvancedFilters = false;
           }
         }
@@ -96,20 +132,20 @@ export default function SupplierList() {
             bValue = b.name.toLowerCase();
             break;
           case 'category':
-            aValue = a.category.toLowerCase();
-            bValue = b.category.toLowerCase();
+            aValue = 'general'; // TODO: Use actual category when implemented
+            bValue = 'general';
             break;
           case 'contactPerson':
-            aValue = a.contactPerson.toLowerCase();
-            bValue = b.contactPerson.toLowerCase();
+            aValue = (a.contact_name || '').toLowerCase();
+            bValue = (b.contact_name || '').toLowerCase();
             break;
           case 'lastOrderDate':
-            aValue = a.lastOrderDate.getTime();
-            bValue = b.lastOrderDate.getTime();
+            aValue = new Date(a.created_at || '').getTime(); // TODO: Use last order date when relationship is implemented
+            bValue = new Date(b.created_at || '').getTime();
             break;
           case 'totalOrders':
-            aValue = a.totalOrders;
-            bValue = b.totalOrders;
+            aValue = 0; // TODO: Calculate total orders from purchase orders when relationship is implemented
+            bValue = 0;
             break;
           default:
             return 0;
@@ -123,7 +159,7 @@ export default function SupplierList() {
         }
         return 0;
       });
-  }, [searchTerm, filterCategory, sortConfig, advancedFilters]);
+  }, [searchTerm, filterCategory, sortConfig, advancedFilters, suppliers]);
 
   const handleAdvancedSearch = (filters: any) => {
     setAdvancedFilters(filters);
@@ -166,7 +202,7 @@ export default function SupplierList() {
           <Select.Trigger placeholder="Filter by category" />
           <Select.Content>
             <Select.Item value="all">All Categories</Select.Item>
-            {ingredientItemCategories.map(category => (
+            {supplierCategories.map(category => (
               <Select.Item key={category} value={category}>{category}</Select.Item>
             ))}
           </Select.Content>
@@ -269,7 +305,7 @@ export default function SupplierList() {
                   <Table.Cell>{supplier.id}</Table.Cell>
                   <Table.Cell>
                     <Text weight="bold">{supplier.name}</Text>
-                    {!supplier.active && 
+                    {!supplier.is_active && 
                     <Box>
                       <Badge color="red">
                         Inactive
@@ -277,14 +313,14 @@ export default function SupplierList() {
                     </Box>
                     }
                   </Table.Cell>
-                  <Table.Cell>{supplier.category}</Table.Cell>
-                  <Table.Cell>{supplier.contactPerson}</Table.Cell>
+                  <Table.Cell>General</Table.Cell> {/* TODO: Add category when suppliers table has this field */}
+                  <Table.Cell>{supplier.contact_name || 'No contact'}</Table.Cell>
                   <Table.Cell>
                     <Text className="block">{supplier.phone}</Text>
                     <Text className="block text-blue-500">{supplier.email}</Text>
                   </Table.Cell>
-                  <Table.Cell>{formatDate(supplier.lastOrderDate)}</Table.Cell>
-                  <Table.Cell align="right">{supplier.totalOrders}</Table.Cell>
+                  <Table.Cell>{formatDate(new Date(supplier.created_at || ''))}</Table.Cell>
+                  <Table.Cell align="right">0</Table.Cell> {/* TODO: Show actual order count when relationship is implemented */}
                   <Table.Cell>
                     <Button size="1" onClick={(e) => {
                       handleViewSupplier(supplier.id);

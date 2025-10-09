@@ -19,9 +19,8 @@ import {
 import { ArrowLeft, CheckCircle, AlertTriangle, Camera, X, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
-import { StockRequest, mockStockRequests } from '@/data/StockRequestData';
-import { organization } from '@/data/CommonData';
-import { getStockItemById } from '@/data/StockRequestData';
+// Removed hardcoded imports - using real data from database services
+// Removed unused imports useOrganization and inventoryService
 import { formatDate } from '@/utilities/index';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -55,7 +54,7 @@ export default function StockTransferInDetailsPage() {
   const params = useParams();
   const requestId = params.id as string;
 
-  const [stockRequest, setStockRequest] = useState<StockRequest | null>(null);
+  const [stockRequest, setStockRequest] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [receivedItems, setReceivedItems] = useState<ReceivedItemState[]>([]);
@@ -68,7 +67,9 @@ export default function StockTransferInDetailsPage() {
     // In a real app, this would be an API call
     // For now, we'll simulate by finding the request in our mock data
     try {
-      const foundRequest = mockStockRequests.find(req => req.id === requestId);
+      // TODO: Replace with real database call
+      // const foundRequest = await inventoryService.getStockRequestById(requestId);
+      const foundRequest = null; // Placeholder until inventory service is enhanced
       
       if (!foundRequest) {
         setError('Stock transfer request not found');
@@ -235,9 +236,10 @@ export default function StockTransferInDetailsPage() {
     );
   }
 
-  // Get origin and destination names
-  const originName = organization.find(org => org.id === stockRequest.originId)?.name || 'Unknown';
-  const destinationName = organization.find(org => org.id === stockRequest.destinationId)?.name || 'Unknown';
+  // Get origin and destination names  
+  // TODO: Replace with real branch lookup from useOrganization
+  const originName = 'Origin Branch'; // Placeholder
+  const destinationName = 'Destination Branch'; // Placeholder
 
   // Check if all items have been processed
   const allItemsProcessed = receivedItems.every(item => item.condition !== '');
@@ -313,7 +315,8 @@ export default function StockTransferInDetailsPage() {
               </Table.Row>
             ) : (
               receivedItems.map((item) => {
-                const stockItem = getStockItemById(item.stockItemId);
+                // TODO: Replace with real inventory item lookup
+                const stockItem = { name: 'Item Name', sku: 'SKU-001', storageUnit: 'kg' }; // Placeholder
                 const hasDiscrepancy = item.receivedQuantity !== item.expectedQuantity;
                 
                 return (

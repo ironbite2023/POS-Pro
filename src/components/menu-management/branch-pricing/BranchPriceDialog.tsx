@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Dialog, TextField, Box, Table, Button, Flex, Text, Badge, IconButton } from '@radix-ui/themes';
 import { Search, Save, X } from 'lucide-react';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded import - using real branches from context
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { toast } from 'sonner';
 
 interface BranchPriceDialogProps {
@@ -29,12 +30,13 @@ export default function BranchPriceDialog({
   menuItem, 
   onSave 
 }: BranchPriceDialogProps) {
+  const { branches } = useOrganization();
   const [branchPrices, setBranchPrices] = useState<{ [branchId: string]: number }>(
     item.branchSpecificPrices || menuItem.branchPrices || {}
   );
   const [searchBranch, setSearchBranch] = useState('');
 
-  const filteredBranches = organization.filter(branch => 
+  const filteredBranches = branches.filter(branch => 
     branch.id !== 'hq' && 
     branch.name.toLowerCase().includes(searchBranch.toLowerCase())
   );

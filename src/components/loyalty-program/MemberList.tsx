@@ -3,7 +3,10 @@
 import { useState, useMemo } from 'react';
 import { Flex, Box, Table, Text, Button, Select, TextField, Badge, IconButton } from '@radix-ui/themes';
 import { Search, RefreshCcw, Edit } from 'lucide-react';
-import { loyaltyMembers } from '@/data/LoyaltyData';
+// Removed hardcoded import - using real data from database services
+import { loyaltyService, type LoyaltyMemberWithTier } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Pagination from '@/components/common/Pagination';
 import { formatDate } from '@/utilities';
@@ -14,10 +17,32 @@ const ITEMS_PER_PAGE = 10;
 
 export default function MemberList() {
   const router = useRouter();
+  const { currentOrganization } = useOrganization();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [pointsRangeFilter, setPointsRangeFilter] = useState<string>('all');
+  const [members, setMembers] = useState<LoyaltyMemberWithTier[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load members from database
+  useEffect(() => {
+    const loadMembers = async () => {
+      if (!currentOrganization) return;
+
+      try {
+        setLoading(true);
+        const data = await loyaltyService.getMembers(currentOrganization.id);
+        setMembers(data);
+      } catch (error) {
+        console.error('Error loading loyalty members:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMembers();
+  }, [currentOrganization]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Pagination state
@@ -34,18 +59,19 @@ export default function MemberList() {
 
   // Filter and sort members with useMemo
   const filteredMembers = useMemo(() => {
-    let filtered = loyaltyMembers.filter(member => {
+    let filtered = members.filter(member => {
       // Apply search term filter
       let matchesSearch = true;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        const phoneDigitsOnly = member.phone.replace(/\D/g, '');
+        const phoneDigitsOnly = (member.phone || '').replace(/\D/g, '');
         const searchDigitsOnly = searchTerm.replace(/\D/g, '');
+        const fullName = `${member.first_name || ''} ${member.last_name || ''}`.toLowerCase();
         
         matchesSearch = 
-          member.name.toLowerCase().includes(term) ||
-          member.email.toLowerCase().includes(term) ||
-          member.phone.includes(searchTerm) ||
+          fullName.includes(term) ||
+          (member.email || '').toLowerCase().includes(term) ||
+          (member.phone || '').includes(searchTerm) ||
           (phoneDigitsOnly.includes(searchDigitsOnly) && searchDigitsOnly.length > 0);
       }
 
@@ -53,23 +79,24 @@ export default function MemberList() {
       const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
       
       // Apply tier filter
-      const matchesTier = tierFilter === 'all' || member.tier.name === tierFilter;
+      const matchesTier = tierFilter === 'all' || member.tier?.name === tierFilter;
 
       // Apply points range filter
       let matchesPoints = true;
       if (pointsRangeFilter !== 'all') {
+        const points = member.current_points || 0;
         switch (pointsRangeFilter) {
           case 'less500':
-            matchesPoints = member.points < 500;
+            matchesPoints = points < 500;
             break;
           case '500to1000':
-            matchesPoints = member.points >= 500 && member.points < 1000;
+            matchesPoints = points >= 500 && points < 1000;
             break;
           case '1000to2000':
-            matchesPoints = member.points >= 1000 && member.points < 2000;
+            matchesPoints = points >= 1000 && points < 2000;
             break;
           case 'more2000':
-            matchesPoints = member.points >= 2000;
+            matchesPoints = points >= 2000;
             break;
         }
       }
@@ -85,32 +112,32 @@ export default function MemberList() {
 
         switch (sortConfig.key) {
           case 'name':
-            aValue = a.name;
-            bValue = b.name;
+            aValue = `${a.first_name || ''} ${a.last_name || ''}`;
+            bValue = `${b.first_name || ''} ${b.last_name || ''}`;
             break;
           case 'email':
-            aValue = a.email;
-            bValue = b.email;
+            aValue = a.email || '';
+            bValue = b.email || '';
             break;
           case 'phone':
-            aValue = a.phone;
-            bValue = b.phone;
+            aValue = a.phone || '';
+            bValue = b.phone || '';
             break;
           case 'tier':
-            aValue = a.tier.name;
-            bValue = b.tier.name;
+            aValue = a.tier?.name || '';
+            bValue = b.tier?.name || '';
             break;
           case 'points':
-            aValue = a.points;
-            bValue = b.points;
+            aValue = a.current_points || 0;
+            bValue = b.current_points || 0;
             break;
           case 'status':
-            aValue = a.status;
-            bValue = b.status;
+            aValue = a.status || '';
+            bValue = b.status || '';
             break;
           case 'joinDate':
-            aValue = new Date(a.joinDate).getTime();
-            bValue = new Date(b.joinDate).getTime();
+            aValue = new Date(a.joined_at || 0).getTime();
+            bValue = new Date(b.joined_at || 0).getTime();
             break;
           default:
             return 0;
@@ -127,7 +154,7 @@ export default function MemberList() {
     }
 
     return filtered;
-  }, [searchTerm, tierFilter, pointsRangeFilter, sortConfig, statusFilter]);
+  }, [searchTerm, tierFilter, pointsRangeFilter, sortConfig, statusFilter, members]);
 
   // Calculate pagination
   const totalItems = filteredMembers.length;
@@ -283,32 +310,32 @@ export default function MemberList() {
           {currentMembers.length > 0 ? (
             currentMembers.map((member) => (
               <Table.Row key={member.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-neutral-800" onClick={() => handleViewMember(member.id)}>
-                <Table.Cell>{member.name}</Table.Cell>
-                <Table.Cell>{member.email}</Table.Cell>
-                <Table.Cell>{member.phone}</Table.Cell>
+                <Table.Cell>{`${member.first_name || ''} ${member.last_name || ''}`}</Table.Cell>
+                <Table.Cell>{member.email || ''}</Table.Cell>
+                <Table.Cell>{member.phone || ''}</Table.Cell>
                 <Table.Cell>
                   <Badge
                     variant="soft"
                     color={
-                      member.tier.name === 'Platinum'
+                      member.tier?.name === 'Platinum'
                         ? 'purple'
-                        : member.tier.name === 'Gold'
+                        : member.tier?.name === 'Gold'
                         ? 'yellow'
-                        : member.tier.name === 'Silver'
+                        : member.tier?.name === 'Silver'
                         ? 'gray'
                         : 'bronze'
                     }
                   >
-                    {member.tier.name}
+                    {member.tier?.name || 'N/A'}
                   </Badge>
                 </Table.Cell>
-                <Table.Cell>{member.points.toLocaleString()}</Table.Cell>
+                <Table.Cell>{(member.current_points || 0).toLocaleString()}</Table.Cell>
                 <Table.Cell>
-                  <Badge variant="soft" color={member.status === 'Active' ? 'green' : 'red'}>
-                    {member.status}
+                  <Badge variant="soft" color={member.status === 'active' ? 'green' : 'red'}>
+                    {member.status || 'N/A'}
                   </Badge>
                 </Table.Cell>
-                <Table.Cell>{formatDate(new Date(member.joinDate))}</Table.Cell>
+                <Table.Cell>{member.joined_at ? formatDate(new Date(member.joined_at)) : 'N/A'}</Table.Cell>
                 <Table.Cell align="center">
                   <Link href={`/loyalty-program/members/${member.id}`}>
                     <IconButton 

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { IngredientItem } from '@/types/inventory';
+import React, { useState, useEffect, useCallback } from 'react';
+import { IngredientItem, StockCategory, UnitOfMeasure } from '@/types/inventory';
 import {
   Box,
   Button,
@@ -10,9 +10,31 @@ import {
   TextField,
   AlertDialog,
 } from '@radix-ui/themes';
-import { ingredientItemCategories, unitOfMeasures } from '@/data/CommonData';
 import { Save, X, Trash2 } from 'lucide-react';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { supabase } from '@/lib/supabase/client';
+import type { Database } from '@/lib/supabase/database.types';
 import { PageHeading } from '@/components/common/PageHeading';
+import { loggingService, InventoryValidationError } from '@/lib/services/logging.service';
+
+type InventoryCategory = Database['public']['Tables']['inventory_categories']['Row'];
+type UnitOfMeasureRow = Database['public']['Tables']['units_of_measure']['Row'];
+
+// Proper TypeScript interface for form data matching IngredientItem structure
+interface IngredientFormData {
+  name: string;
+  nameLocalized: string;
+  sku: string;
+  category: string; // Will be converted to StockCategory on submit
+  storageUnit: string; // Will be converted to UnitOfMeasure on submit
+  ingredientUnit: string; // Will be converted to UnitOfMeasure on submit
+  storageIngredientFactor: number;
+  unitPrice: number;
+  barcode: string;
+  minLevel: number;
+  maxLevel: number;
+  reorderLevel: number;
+}
 
 interface IngredientItemFormProps {
   onSubmit: (ingredient: Omit<IngredientItem, 'id'> & { id?: string }) => void;
@@ -27,13 +49,31 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
   onDelete,
   editingItem 
 }) => {
+  const { currentOrganization } = useOrganization();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [categories, setCategories] = useState<InventoryCategory[]>([]);
+  const [units, setUnits] = useState<UnitOfMeasureRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   // Initialize form with existing item data if in edit mode
-  const getInitialFormData = () => {
+  const getInitialFormData = useCallback((): IngredientFormData => {
     if (editingItem) {
-      const { id, ...rest } = editingItem;
-      return rest;
+      const { id, branchData, ...rest } = editingItem;
+      return {
+        name: rest.name,
+        nameLocalized: rest.nameLocalized,
+        sku: rest.sku,
+        category: rest.category as string,
+        storageUnit: rest.storageUnit as string,
+        ingredientUnit: rest.ingredientUnit as string,
+        storageIngredientFactor: rest.storageIngredientFactor,
+        unitPrice: rest.unitPrice || 0,
+        barcode: rest.barcode,
+        minLevel: rest.minLevel || 0,
+        maxLevel: rest.maxLevel || 0,
+        reorderLevel: rest.reorderLevel || 0,
+      };
     }
     
     return {
@@ -50,51 +90,334 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
       maxLevel: 0,
       reorderLevel: 0,
     };
-  };
+  }, [editingItem]);
 
-  const [formData, setFormData] = useState<any>(
+  const [formData, setFormData] = useState<IngredientFormData>(
     getInitialFormData()
   );
+
+  // Fetch categories from database (wrapped with useCallback)
+  const fetchCategories = useCallback(async (): Promise<InventoryCategory[]> => {
+    if (!currentOrganization) return [];
+
+    try {
+      loggingService.debug('Fetching inventory categories', {
+        organizationId: currentOrganization.id,
+        component: 'IngredientItemForm'
+      });
+
+      const { data, error } = await supabase
+        .from('inventory_categories')
+        .select('*')
+        .eq('organization_id', currentOrganization.id)
+        .order('name');
+
+      if (error) throw error;
+      
+      loggingService.debug('Categories fetched successfully', {
+        organizationId: currentOrganization.id,
+        categoryCount: data?.length || 0
+      });
+
+      return data || [];
+    } catch (err) {
+      loggingService.error('Failed to fetch inventory categories', err as Error, {
+        organizationId: currentOrganization.id,
+        component: 'IngredientItemForm',
+        operation: 'fetchCategories'
+      });
+      throw err;
+    }
+  }, [currentOrganization]);
+
+  // Fetch units of measure from database (wrapped with useCallback)
+  const fetchUnitsOfMeasure = useCallback(async (): Promise<UnitOfMeasureRow[]> => {
+    if (!currentOrganization) return [];
+
+    try {
+      loggingService.debug('Fetching units of measure', {
+        organizationId: currentOrganization.id,
+        component: 'IngredientItemForm'
+      });
+
+      const { data, error } = await supabase
+        .from('units_of_measure')
+        .select('*')
+        .eq('organization_id', currentOrganization.id)
+        .order('unit_type', { ascending: true });
+
+      if (error) throw error;
+      
+      loggingService.debug('Units of measure fetched successfully', {
+        organizationId: currentOrganization.id,
+        unitCount: data?.length || 0
+      });
+
+      return data || [];
+    } catch (err) {
+      loggingService.error('Failed to fetch units of measure', err as Error, {
+        organizationId: currentOrganization.id,
+        component: 'IngredientItemForm',
+        operation: 'fetchUnitsOfMeasure'
+      });
+      throw err;
+    }
+  }, [currentOrganization]);
+
+  // Load categories and units of measure on component mount
+  useEffect(() => {
+    const loadFormData = async () => {
+      if (!currentOrganization) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch categories and units in parallel
+        const [categoriesData, unitsData] = await Promise.all([
+          fetchCategories(),
+          fetchUnitsOfMeasure()
+        ]);
+
+        setCategories(categoriesData);
+        setUnits(unitsData);
+
+        loggingService.info('Form data loaded successfully', {
+          organizationId: currentOrganization.id,
+          categoriesCount: categoriesData.length,
+          unitsCount: unitsData.length,
+          editingMode: !!editingItem
+        });
+      } catch (err) {
+        const errorMessage = 'Failed to load categories and units. Please try again.';
+        setError(errorMessage);
+        
+        loggingService.error('Form data loading failed', err as Error, {
+          organizationId: currentOrganization.id,
+          component: 'IngredientItemForm',
+          operation: 'loadFormData'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFormData();
+  }, [currentOrganization, fetchCategories, fetchUnitsOfMeasure, editingItem]);
 
   // Update form data if existingItem changes
   useEffect(() => {
     if (editingItem) {
-      const { id, ...rest } = editingItem;
-      setFormData(rest);
+      setFormData(getInitialFormData());
+      
+      loggingService.debug('Form data updated for editing', {
+        itemId: editingItem.id,
+        itemName: editingItem.name,
+        component: 'IngredientItemForm'
+      });
     }
-  }, [editingItem]);
+  }, [editingItem, getInitialFormData]);
 
-  const handleChange = (name: string, value: string | number) => {
+  const handleChange = (name: keyof IngredientFormData, value: string | number) => {
     setFormData(prev => ({
       ...prev,
-      [name]: name.includes('Level') || name === 'unitPrice' || name === 'storageIngredientFactor'
+      [name]: ['minLevel', 'maxLevel', 'reorderLevel', 'unitPrice', 'storageIngredientFactor'].includes(name)
         ? parseFloat(value as string)
         : value
     }));
   };
 
+  const validateFormData = (data: IngredientFormData): boolean => {
+    try {
+      if (!data.name.trim()) {
+        throw new InventoryValidationError('Name is required', 'name', data.name);
+      }
+      
+      if (!data.sku.trim()) {
+        throw new InventoryValidationError('SKU is required', 'sku', data.sku);
+      }
+      
+      if (!data.category) {
+        throw new InventoryValidationError('Category is required', 'category', data.category);
+      }
+      
+      if (data.unitPrice < 0) {
+        throw new InventoryValidationError('Unit price must be positive', 'unitPrice', data.unitPrice);
+      }
+      
+      if (data.minLevel < 0 || data.maxLevel < 0 || data.reorderLevel < 0) {
+        throw new InventoryValidationError('Stock levels must be positive', 'levels', {
+          minLevel: data.minLevel,
+          maxLevel: data.maxLevel,
+          reorderLevel: data.reorderLevel
+        });
+      }
+      
+      if (data.maxLevel > 0 && data.minLevel > data.maxLevel) {
+        throw new InventoryValidationError('Minimum level cannot be greater than maximum level', 'levels', {
+          minLevel: data.minLevel,
+          maxLevel: data.maxLevel
+        });
+      }
+      
+      return true;
+    } catch (err) {
+      if (err instanceof InventoryValidationError) {
+        loggingService.warn('Form validation failed', {
+          field: err.field,
+          value: err.value,
+          message: err.message,
+          component: 'IngredientItemForm'
+        });
+      }
+      throw err;
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const updatedFormData = { ...formData };
-    
-    // If editing, pass the id back with the form data
-    if (editingItem) {
-      onSubmit({
-        ...updatedFormData,
-        id: editingItem.id
-      });
-    } else {
-      onSubmit(updatedFormData);
+    try {
+      // Validate form data before submission
+      validateFormData(formData);
+
+      // Convert form data to IngredientItem format with proper types
+      const ingredientData: Omit<IngredientItem, 'id'> & { id?: string } = {
+        name: formData.name,
+        nameLocalized: formData.nameLocalized,
+        sku: formData.sku,
+        category: formData.category as StockCategory,
+        storageUnit: formData.storageUnit as UnitOfMeasure,
+        ingredientUnit: formData.ingredientUnit as UnitOfMeasure,
+        storageIngredientFactor: formData.storageIngredientFactor,
+        unitPrice: formData.unitPrice,
+        barcode: formData.barcode,
+        minLevel: formData.minLevel,
+        maxLevel: formData.maxLevel,
+        reorderLevel: formData.reorderLevel,
+      };
+      
+      // If editing, add the id
+      if (editingItem) {
+        ingredientData.id = editingItem.id;
+      }
+
+      loggingService.userAction(
+        editingItem ? 'Edit Ingredient Item' : 'Create Ingredient Item',
+        undefined, // userId would come from auth context
+        {
+          itemName: ingredientData.name,
+          sku: ingredientData.sku,
+          category: ingredientData.category,
+          editingMode: !!editingItem,
+          organizationId: currentOrganization?.id
+        }
+      );
+
+      onSubmit(ingredientData);
+    } catch (err) {
+      if (err instanceof InventoryValidationError) {
+        // Validation errors are already logged in validateFormData
+        setError(err.message);
+      } else {
+        const errorMessage = 'Failed to save ingredient item. Please try again.';
+        setError(errorMessage);
+        
+        loggingService.error('Form submission failed', err as Error, {
+          component: 'IngredientItemForm',
+          operation: 'handleSubmit',
+          editingMode: !!editingItem,
+          formData: {
+            name: formData.name,
+            sku: formData.sku,
+            category: formData.category
+          }
+        });
+      }
     }
   };
 
   const handleDelete = () => {
     if (editingItem?.id && onDelete) {
+      loggingService.userAction('Delete Ingredient Item', undefined, {
+        itemId: editingItem.id,
+        itemName: editingItem.name,
+        sku: editingItem.sku,
+        component: 'IngredientItemForm'
+      });
+
       onDelete(editingItem.id);
       setShowDeleteDialog(false);
     }
   };
+
+  if (loading) {
+    return (
+      <Box>
+        <Flex justify="between" align="center" mb="5">
+          <PageHeading
+            title={editingItem ? `Edit ${editingItem.name}` : 'Add Ingredient Item'}
+            description="Loading form data..."
+            showBackButton
+            onBackClick={onCancel}
+            noMarginBottom
+          />
+        </Flex>
+
+        <Flex direction={{ initial: "column", sm: "row" }} gap="4">
+          <Card size="3" className="w-full sm:basis-3/4 space-y-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="animate-pulse">
+                <div className="h-4 bg-gray-300 rounded w-1/4 mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </Card>
+          <Card size="3" className="w-full sm:basis-1/4 space-y-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="animate-pulse">
+                <div className="h-4 bg-gray-300 rounded w-1/2 mb-2"></div>
+                <div className="h-10 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </Card>
+        </Flex>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box>
+        <Flex justify="between" align="center" mb="5">
+          <PageHeading
+            title="Error Loading Form"
+            description={error}
+            showBackButton
+            onBackClick={onCancel}
+            noMarginBottom
+          />
+        </Flex>
+        <Card size="3" className="text-center">
+          <Text color="red">{error}</Text>
+          <Button 
+            variant="soft" 
+            color="gray" 
+            mt="3"
+            onClick={() => {
+              setError(null);
+              window.location.reload();
+            }}
+          >
+            Retry
+          </Button>
+        </Card>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -152,14 +475,17 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
                 onValueChange={(value) => handleChange('category', value)}
                 required
               >
-                <Select.Trigger />
+                <Select.Trigger placeholder="Select category" />
                 <Select.Content>
-                  {ingredientItemCategories.map(category => (
-                    <Select.Item key={category} value={category}>{category}</Select.Item>
+                  {categories.map(category => (
+                    <Select.Item key={category.id} value={category.name}>
+                      {category.name}
+                    </Select.Item>
                   ))}
                 </Select.Content>
               </Select.Root>
             </Flex>
+            
             <Flex direction="column" gap="1">
               <Text as="label" size="2" weight="medium">Unit Price</Text>
               <TextField.Root
@@ -183,6 +509,7 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
               />
             </Flex>
           </Card>
+          
           <Card size="3" className="w-full sm:basis-1/4 space-y-4">
             <Flex direction="column" gap="4">
               <Flex direction="column" gap="1">
@@ -193,10 +520,12 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
                   onValueChange={(value) => handleChange('storageUnit', value)}
                   required
                 >
-                  <Select.Trigger />
+                  <Select.Trigger placeholder="Select storage unit" />
                   <Select.Content>
-                    {unitOfMeasures.map(unit => (
-                      <Select.Item key={unit} value={unit}>{unit}</Select.Item>
+                    {units.map(unit => (
+                      <Select.Item key={unit.id} value={unit.abbreviation}>
+                        {unit.name} ({unit.abbreviation})
+                      </Select.Item>
                     ))}
                   </Select.Content>
                 </Select.Root>
@@ -210,10 +539,12 @@ export const IngredientItemForm: React.FC<IngredientItemFormProps> = ({
                   onValueChange={(value) => handleChange('ingredientUnit', value)}
                   required
                 >
-                  <Select.Trigger />
+                  <Select.Trigger placeholder="Select ingredient unit" />
                   <Select.Content>
-                    {unitOfMeasures.map(unit => (
-                      <Select.Item key={unit} value={unit}>{unit}</Select.Item>
+                    {units.map(unit => (
+                      <Select.Item key={unit.id} value={unit.abbreviation}>
+                        {unit.name} ({unit.abbreviation})
+                      </Select.Item>
                     ))}
                   </Select.Content>
                 </Select.Root>

@@ -200,7 +200,7 @@ function ActivitySection() {
     },
     {
       id: 2,
-      member: "Jane Smith",
+      member: "System User",
       action: "Reward Redeemed",
       amount: "Free Coffee",
       date: "2024-03-20 13:15",

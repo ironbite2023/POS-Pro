@@ -1,5 +1,6 @@
 import { supabase } from '../supabase/client';
 import type { Database, Json } from '../supabase/database.types';
+import { taxService } from './tax.service';
 
 type Order = Database['public']['Tables']['orders']['Row'];
 type OrderInsert = Database['public']['Tables']['orders']['Insert'];
@@ -39,15 +40,22 @@ export interface OrderWithItems extends Order {
 
 export const ordersService = {
   /**
-   * Create a new order with items
+   * Create a new order with items - now with dynamic tax calculation
    */
   createOrder: async (params: CreateOrderParams): Promise<OrderWithItems> => {
-    // Calculate totals
+    // Calculate subtotal
     const subtotal = params.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
       0
     );
-    const taxAmount = subtotal * 0.1; // 10% tax rate (should be configurable)
+    
+    // Get dynamic tax rate based on organization and branch
+    const taxRate = await taxService.getTaxRate(
+      params.organizationId, 
+      params.branchId
+    );
+    const taxAmount = subtotal * taxRate;
+    
     const totalAmount =
       subtotal + taxAmount + (params.tipAmount || 0) - (params.discountAmount || 0);
 
@@ -131,10 +139,11 @@ export const ordersService = {
   },
 
   /**
-   * Get orders for a branch (with optional filters)
+   * Get orders for an organization (single branch or multiple branches)
    */
   getOrders: async (
-    branchId: string,
+    organizationId: string,
+    branchIds: string | string[],
     filters?: {
       status?: OrderStatus;
       orderType?: OrderType;
@@ -146,8 +155,17 @@ export const ordersService = {
     let query = supabase
       .from('orders')
       .select('*')
-      .eq('branch_id', branchId)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
+
+    // Handle both single branch and multiple branches
+    if (Array.isArray(branchIds)) {
+      if (branchIds.length > 0) {
+        query = query.in('branch_id', branchIds);
+      }
+    } else {
+      query = query.eq('branch_id', branchIds);
+    }
 
     if (filters?.status) {
       query = query.eq('status', filters.status);
@@ -176,18 +194,32 @@ export const ordersService = {
   },
 
   /**
-   * Get live orders (new, confirmed, preparing)
+   * Get live orders (new, confirmed, preparing) for organization or branch(es)
    */
-  getLiveOrders: async (branchId: string): Promise<OrderWithItems[]> => {
-    const { data, error } = await supabase
+  getLiveOrders: async (
+    organizationId: string,
+    branchIds: string | string[]
+  ): Promise<OrderWithItems[]> => {
+    let query = supabase
       .from('orders')
       .select(`
         *,
         items:order_items(*)
       `)
-      .eq('branch_id', branchId)
+      .eq('organization_id', organizationId)
       .in('status', ['new', 'confirmed', 'preparing', 'ready'])
       .order('created_at', { ascending: true });
+
+    // Handle both single branch and multiple branches
+    if (Array.isArray(branchIds)) {
+      if (branchIds.length > 0) {
+        query = query.in('branch_id', branchIds);
+      }
+    } else {
+      query = query.eq('branch_id', branchIds);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return data || [];
@@ -252,10 +284,11 @@ export const ordersService = {
   },
 
   /**
-   * Get order statistics for a branch
+   * Get order statistics for organization or branch(es)
    */
   getOrderStats: async (
-    branchId: string,
+    organizationId: string,
+    branchIds: string | string[],
     startDate: string,
     endDate: string
   ): Promise<{
@@ -264,13 +297,24 @@ export const ordersService = {
     avgOrderValue: number;
     ordersByType: Record<string, number>;
   }> => {
-    const { data: orders, error } = await supabase
+    let query = supabase
       .from('orders')
       .select('total_amount, order_type')
-      .eq('branch_id', branchId)
+      .eq('organization_id', organizationId)
       .gte('created_at', startDate)
       .lte('created_at', endDate)
       .neq('status', 'cancelled');
+
+    // Handle both single branch and multiple branches
+    if (Array.isArray(branchIds)) {
+      if (branchIds.length > 0) {
+        query = query.in('branch_id', branchIds);
+      }
+    } else {
+      query = query.eq('branch_id', branchIds);
+    }
+
+    const { data: orders, error } = await query;
 
     if (error) throw error;
 
@@ -292,7 +336,7 @@ export const ordersService = {
   },
 
   /**
-   * Subscribe to order changes (real-time)
+   * Subscribe to order changes (real-time) for a specific branch
    */
   subscribeToOrders: (
     branchId: string,
@@ -307,6 +351,28 @@ export const ordersService = {
           schema: 'public',
           table: 'orders',
           filter: `branch_id=eq.${branchId}`,
+        },
+        callback
+      )
+      .subscribe();
+  },
+
+  /**
+   * Subscribe to order changes (real-time) for an organization
+   */
+  subscribeToOrganizationOrders: (
+    organizationId: string,
+    callback: (payload: unknown) => void
+  ) => {
+    return supabase
+      .channel(`orders:org:${organizationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `organization_id=eq.${organizationId}`,
         },
         callback
       )
@@ -331,5 +397,57 @@ export const ordersService = {
 
     if (error) throw error;
     return data || [];
+  },
+
+  /**
+   * Get hourly order trends for a specific date range
+   */
+  getHourlyTrends: async (
+    organizationId: string,
+    branchIds: string | string[],
+    startDate: string,
+    endDate: string
+  ): Promise<{ hour: string; orders: number }[]> => {
+    let query = supabase
+      .from('orders')
+      .select('created_at')
+      .eq('organization_id', organizationId)
+      .gte('created_at', startDate)
+      .lte('created_at', endDate)
+      .neq('status', 'cancelled');
+
+    // Handle both single branch and multiple branches
+    if (Array.isArray(branchIds)) {
+      if (branchIds.length > 0) {
+        query = query.in('branch_id', branchIds);
+      }
+    } else {
+      query = query.eq('branch_id', branchIds);
+    }
+
+    const { data: orders, error } = await query;
+
+    if (error) throw error;
+
+    // Group orders by hour
+    const hourlyData: Record<number, number> = {};
+    
+    // Initialize all hours with 0
+    for (let i = 0; i < 24; i++) {
+      hourlyData[i] = 0;
+    }
+
+    // Count orders per hour
+    orders?.forEach((order) => {
+      const date = new Date(order.created_at);
+      const hour = date.getHours();
+      hourlyData[hour] = (hourlyData[hour] || 0) + 1;
+    });
+
+    // Convert to array format with formatted hour labels
+    return Array.from({ length: 24 }, (_, i) => ({
+      hour: i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`,
+      orders: hourlyData[i] || 0,
+    }));
   },
 };

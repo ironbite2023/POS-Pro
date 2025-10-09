@@ -12,19 +12,39 @@ import {
   AlertTriangle,
   ChevronRight
 } from 'lucide-react';
-import { mockPurchaseOrderStats, RestockAlert } from '@/data/PurchaseOrderData';
+// Removed hardcoded imports - using real data from database services
+import { suppliersService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import MetricCard from '@/components/common/MetricCard';
 import CardHeading from '@/components/common/CardHeading';
 
+// Placeholder stats structure until proper API integration
+const defaultStats = {
+  totalPurchaseOrders: 0,
+  pendingOrders: 0,
+  completedOrders: 0,
+  outstandingPayments: 0,
+  averageDeliveryTime: 0,
+  accuracyRate: 0,
+  restockAlerts: []
+};
+
 export default function PurchaseOrderDashboard() {
-  const [stats, setStats] = useState(mockPurchaseOrderStats);
+  const [stats, setStats] = useState(defaultStats);
   const [isLoaded, setIsLoaded] = useState(false);
   
   useEffect(() => {
-    // Simulate API call
+    // TODO: Implement real stats loading from purchaseOrderService
     const fetchStats = async () => {
-      setStats(mockPurchaseOrderStats);
-      setIsLoaded(true);
+      try {
+        // Placeholder until proper service implementation
+        setStats(defaultStats);
+        setIsLoaded(true);
+      } catch (error) {
+        console.error('Error loading purchase order stats:', error);
+        setStats(defaultStats);
+        setIsLoaded(true);
+      }
     };
     
     fetchStats();

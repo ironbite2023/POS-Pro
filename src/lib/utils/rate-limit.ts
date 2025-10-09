@@ -1,15 +1,27 @@
 /**
- * Simple in-memory rate limiter
- * For production, use Redis or a dedicated rate limiting service
+ * Enhanced rate limiter with production-ready features
+ * Structured for easy Redis migration in production environments
  */
 
 interface RateLimitEntry {
   count: number;
   resetTime: number;
+  violations: number; // Track consecutive violations for progressive limiting
+  lastViolation: number; // Timestamp of last violation
 }
 
-// Store rate limit data in memory
+interface RateLimitConfig {
+  maxRequests: number;
+  windowMs: number;
+  skipOnSuccess?: boolean;
+  skipFailedRequests?: boolean;
+  progressivePenalty?: boolean; // Enable progressive rate limiting
+  bypassRoles?: string[]; // User roles that bypass rate limiting
+}
+
+// Store rate limit data in memory (Redis-ready structure)
 const rateLimitStore = new Map<string, RateLimitEntry>();
+const suspiciousIPs = new Set<string>(); // Track suspicious IP addresses
 
 // Cleanup old entries every 5 minutes
 setInterval(() => {
@@ -21,7 +33,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-interface RateLimitResult {
+export interface RateLimitResult {
   success: boolean;
   limit: number;
   remaining: number;
@@ -29,52 +41,83 @@ interface RateLimitResult {
 }
 
 /**
- * Check rate limit for a given identifier (IP address, user ID, etc.)
+ * Enhanced rate limiting with progressive penalties and security features
  * @param identifier - Unique identifier for rate limiting (e.g., IP address)
- * @param maxRequests - Maximum number of requests allowed
- * @param windowMs - Time window in milliseconds
+ * @param config - Rate limiting configuration or simple maxRequests number
+ * @param windowMs - Time window in milliseconds (used if config is number)
  */
 export const checkRateLimit = (
   identifier: string,
-  maxRequests: number = 5,
+  config: RateLimitConfig | number = 5,
   windowMs: number = 15 * 60 * 1000 // 15 minutes default
 ): RateLimitResult => {
   const now = Date.now();
+  
+  // Handle legacy number parameter
+  const rateLimitConfig: RateLimitConfig = typeof config === 'number' 
+    ? { maxRequests: config, windowMs }
+    : config;
+
   const entry = rateLimitStore.get(identifier);
+
+  // Check if IP is suspicious
+  const isSuspicious = suspiciousIPs.has(identifier);
+  const suspiciousPenalty = isSuspicious ? 0.5 : 1; // 50% reduction for suspicious IPs
+
+  // Calculate actual limits with progressive penalties
+  let effectiveMaxRequests = Math.floor(rateLimitConfig.maxRequests * suspiciousPenalty);
+  
+  if (entry && rateLimitConfig.progressivePenalty) {
+    // Apply progressive penalty based on violations
+    const penaltyFactor = Math.max(0.1, 1 - (entry.violations * 0.2));
+    effectiveMaxRequests = Math.floor(effectiveMaxRequests * penaltyFactor);
+  }
 
   // First request or expired window
   if (!entry || entry.resetTime < now) {
-    const resetTime = now + windowMs;
+    const resetTime = now + rateLimitConfig.windowMs;
     rateLimitStore.set(identifier, {
       count: 1,
       resetTime,
+      violations: entry?.violations || 0,
+      lastViolation: entry?.lastViolation || 0,
     });
 
     return {
       success: true,
-      limit: maxRequests,
-      remaining: maxRequests - 1,
+      limit: effectiveMaxRequests,
+      remaining: effectiveMaxRequests - 1,
       reset: resetTime,
     };
   }
 
   // Within rate limit window
-  if (entry.count < maxRequests) {
+  if (entry.count < effectiveMaxRequests) {
     entry.count += 1;
     rateLimitStore.set(identifier, entry);
 
     return {
       success: true,
-      limit: maxRequests,
-      remaining: maxRequests - entry.count,
+      limit: effectiveMaxRequests,
+      remaining: effectiveMaxRequests - entry.count,
       reset: entry.resetTime,
     };
   }
 
-  // Rate limit exceeded
+  // Rate limit exceeded - record violation
+  entry.violations += 1;
+  entry.lastViolation = now;
+  rateLimitStore.set(identifier, entry);
+
+  // Mark as suspicious if too many violations
+  if (entry.violations >= 5) {
+    suspiciousIPs.add(identifier);
+    console.warn(`[Security] IP ${identifier} marked as suspicious after ${entry.violations} violations`);
+  }
+
   return {
     success: false,
-    limit: maxRequests,
+    limit: effectiveMaxRequests,
     remaining: 0,
     reset: entry.resetTime,
   };

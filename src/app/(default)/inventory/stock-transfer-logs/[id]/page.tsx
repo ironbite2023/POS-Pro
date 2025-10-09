@@ -17,15 +17,19 @@ import {
 } from '@radix-ui/themes';
 import { ArrowLeft, AlertTriangle, FileText, Package, ArrowRight } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
-import { getTransferLogById, getUserById } from '@/data/StockTransferLogData';
-import { organization } from '@/data/CommonData';
-import { getStockItemById } from '@/data/StockTransferLogData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded imports - using real data from database services
+// Placeholder functions
+const getTransferLogById = (_id: string) => null;
+const getUserById = (_id: string) => null;
+const getStockItemById = (_id: string) => null;
 import { formatDate } from '@/utilities/index';
 import { getTransferStatusBadge } from '@/utilities/transferStatusBadge';
 import { PageHeading } from '@/components/common/PageHeading';
 import Image from 'next/image';
 
 export default function StockTransferLogDetailsPage() {
+  const { branches } = useOrganization();
   const router = useRouter();
   const params = useParams();
   const [transferLog, setTransferLog] = useState(null);
@@ -83,9 +87,9 @@ export default function StockTransferLogDetailsPage() {
     );
   }
 
-  // Get organization names
-  const originName = organization.find(org => org.id === transferLog.originId)?.name || 'Unknown';
-  const destinationName = organization.find(org => org.id === transferLog.destinationId)?.name || 'Unknown';
+  // Get branch names
+  const originName = branches.find(b => b.id === transferLog.originId)?.name || 'Unknown';
+  const destinationName = branches.find(b => b.id === transferLog.destinationId)?.name || 'Unknown';
   
   // Get user names
   const creatorName = getUserById(transferLog.createdBy)?.name || 'Unknown';

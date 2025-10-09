@@ -1,6 +1,10 @@
 import React from 'react';
 import { Flex, Grid, Text, TextField, Select, Card } from '@radix-ui/themes';
-import { Branch } from '@/data/BranchData';
+// Removed hardcoded import - using real branch data from context
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 
 interface GeneralInfoTabProps {
   branch: Branch;
@@ -63,7 +67,7 @@ export default function GeneralInfoTab({ branch, regions, onUpdate }: GeneralInf
             </Text>
             <TextField.Root 
               placeholder="Enter phone number"
-              value={branch.phone}
+              value={String(branch.phone || '')}
               onChange={(e) => onUpdate({ phone: e.target.value })}
               required
             />
@@ -76,7 +80,7 @@ export default function GeneralInfoTab({ branch, regions, onUpdate }: GeneralInf
           </Text>
           <TextField.Root 
             placeholder="Enter branch address"
-            value={branch.address}
+            value={String(branch.address || '')}
             onChange={(e) => onUpdate({ address: e.target.value })}
             required
           />
@@ -88,8 +92,8 @@ export default function GeneralInfoTab({ branch, regions, onUpdate }: GeneralInf
           </Text>
           <TextField.Root 
             placeholder="Enter city"
-            value={branch.city}
-            onChange={(e) => onUpdate({ city: e.target.value })}
+            value={(branch as any).city || ''}
+            onChange={(e) => (onUpdate as any)({ city: e.target.value })}
             required
           />
         </Flex>

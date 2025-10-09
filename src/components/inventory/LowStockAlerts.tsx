@@ -14,6 +14,7 @@ import { AlertTriangle, Package } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { inventoryService } from '@/lib/services';
 import type { Database } from '@/lib/supabase/database.types';
+import { loggingService } from '@/lib/services/logging.service';
 
 type BranchInventory = Database['public']['Tables']['branch_inventory']['Row'] & {
   inventory_item?: Database['public']['Tables']['inventory_items']['Row'];
@@ -33,10 +34,40 @@ export default function LowStockAlerts() {
     const fetchLowStockItems = async () => {
       try {
         setLoading(true);
+        
+        loggingService.debug('Fetching low stock items for alerts', {
+          branchId: currentBranch.id,
+          organizationId: currentOrganization.id,
+          component: 'LowStockAlerts'
+        });
+
         const items = await inventoryService.getLowStockItems(currentBranch.id);
         setLowStockItems(items);
+
+        // Log alert information for monitoring
+        if (items.length > 0) {
+          loggingService.warn('Low stock alert triggered', {
+            branchId: currentBranch.id,
+            itemCount: items.length,
+            items: items.map(item => ({
+              name: item.inventory_item?.name,
+              currentQuantity: item.current_quantity,
+              reorderPoint: item.reorder_point
+            }))
+          });
+        } else {
+          loggingService.info('No low stock items found', {
+            branchId: currentBranch.id,
+            component: 'LowStockAlerts'
+          });
+        }
       } catch (error) {
-        console.error('Error fetching low stock items:', error);
+        loggingService.error('Failed to fetch low stock items for alerts', error as Error, {
+          branchId: currentBranch.id,
+          organizationId: currentOrganization.id,
+          component: 'LowStockAlerts',
+          operation: 'fetchLowStockItems'
+        });
       } finally {
         setLoading(false);
       }
@@ -85,7 +116,19 @@ export default function LowStockAlerts() {
           ))}
         </Flex>
 
-        <Button size="2" variant="soft" color="orange">
+        <Button 
+          size="2" 
+          variant="soft" 
+          color="orange"
+          onClick={() => {
+            loggingService.userAction('Create Purchase Order from Low Stock Alert', undefined, {
+              branchId: currentBranch?.id,
+              itemCount: lowStockItems.length,
+              component: 'LowStockAlerts'
+            });
+            // Navigate to purchase order creation
+          }}
+        >
           Create Purchase Order
         </Button>
       </Flex>

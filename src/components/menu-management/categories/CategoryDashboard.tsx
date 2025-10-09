@@ -1,17 +1,53 @@
 import { Box, ReceiptText, TrendingDown, TrendingUp, Utensils } from "lucide-react"
-import { menuCategories, menuItems } from "@/data/MenuData"
+// Removed hardcoded imports - using real data from database services
+import { menuService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect, useState } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type MenuCategory = Database['public']['Tables']['menu_categories']['Row'];
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
 import MetricCard from "@/components/common/MetricCard"
 import { Heading } from "@radix-ui/themes"
 
 export function CategoryDashboard() {
+  const { currentOrganization } = useOrganization();
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load data from database
+  useEffect(() => {
+    const loadData = async () => {
+      if (!currentOrganization) return;
+
+      try {
+        setLoading(true);
+        const [categoriesData, itemsData] = await Promise.all([
+          menuService.getCategories(currentOrganization.id),
+          menuService.getMenuItems(currentOrganization.id)
+        ]);
+        
+        setCategories(categoriesData);
+        setMenuItems(itemsData);
+      } catch (error) {
+        console.error('Error loading category dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [currentOrganization]);
+
   // Calculate statistics
-  const totalCategories = menuCategories.length
+  const totalCategories = categories.length
 
   // Calculate items per category
-  const itemsPerCategory = menuCategories.map(category => ({
+  const itemsPerCategory = categories.map(category => ({
     id: category.id,
     name: category.name,
-    count: menuItems.filter(item => item.category === category.id).length
+    count: menuItems.filter(item => item.category_id === category.id).length
   }))
 
   // Find category with most items

@@ -114,7 +114,8 @@ export default function MenuItemForm({
         await menuService.updateMenuItem(menuItem.id, itemData);
         toast.success('Menu item updated successfully');
       } else {
-        await menuService.createMenuItem(itemData);
+        const { organization_id, ...itemWithoutOrgId } = itemData;
+        await menuService.createMenuItem(organization_id, itemWithoutOrgId);
         toast.success('Menu item created successfully');
       }
       

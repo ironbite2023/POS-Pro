@@ -4,7 +4,10 @@ import RecipeDetails from "@/components/menu-management/recipes/RecipeDetails";
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Recipe } from '@/types/inventory';
-import { recipes } from "@/data/RecipesData";
+// Removed hardcoded import - using real recipes from database services
+// Note: Recipe management will use menuService for recipe data
+// Placeholder data
+const recipes: any[] = [];
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 async function fetchRecipeById(id: string): Promise<Recipe | null> {

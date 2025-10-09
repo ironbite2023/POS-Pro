@@ -13,7 +13,8 @@ import {
 import DateRangeInput from '@/components/common/DateRangeInput';
 import { Range } from 'react-date-range';
 import { useFilterBranch, FilterBranchProvider } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded import - using real organization from context
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
@@ -32,8 +33,6 @@ const reportTypes = [
   { id: 'price', name: 'Price Variance Report' },
   { id: 'budget', name: 'Purchase Budget Analysis' },
 ];
-
-const branches = organization.filter(org => org.id !== 'hq');
 
 // Mock supplier categories
 const supplierCategories = [
@@ -110,39 +109,8 @@ const mockSupplierPerformanceData = mockSuppliers.map(supplier => {
   };
 });
 
-// Generate purchase order status data
-const mockPurchaseOrderStatusData = branches.map(branch => {
-  // Generate random order counts
-  const completedOrders = Math.floor(Math.random() * 40) + 10;
-  const pendingOrders = Math.floor(Math.random() * 15) + 5;
-  const inTransitOrders = Math.floor(Math.random() * 10) + 2;
-  const cancelledOrders = Math.floor(Math.random() * 5);
-  
-  // Calculate total orders
-  const totalOrders = completedOrders + pendingOrders + inTransitOrders + cancelledOrders;
-  
-  // Generate order values
-  const completedValue = parseFloat((Math.random() * 7000 + 3000).toFixed(2));
-  const pendingValue = parseFloat((Math.random() * 3000 + 1000).toFixed(2));
-  const inTransitValue = parseFloat((Math.random() * 2000 + 500).toFixed(2));
-  
-  // Calculate average processing time (in days)
-  const avgProcessingTime = parseFloat((Math.random() * 3 + 1).toFixed(1));
-  
-  return {
-    id: branch.id,
-    name: branch.name,
-    completedOrders,
-    pendingOrders,
-    inTransitOrders,
-    cancelledOrders,
-    totalOrders,
-    completedValue,
-    pendingValue,
-    inTransitValue,
-    avgProcessingTime
-  };
-});
+// Generate purchase order status data - TODO: Replace with real data
+const mockPurchaseOrderStatusData: any[] = [];
 
 // Generate price variance data
 const mockPriceVarianceData = mockSuppliers.map(supplier => {
@@ -207,6 +175,8 @@ const mockPurchaseBudgetData = supplierCategories.map(category => {
 
 function PurchasingReportsContent() {
   usePageTitle('Purchasing Reports');
+  const { branches: orgBranches } = useOrganization();
+  const branches = orgBranches.filter(b => b.id !== 'hq');
   const [isClient, setIsClient] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState('spending'); // Default to purchase spending
   const [dateRange, setDateRange] = useState<Range>({

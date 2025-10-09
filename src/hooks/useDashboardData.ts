@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { ordersService, inventoryService } from '@/lib/services';
+import { staffService, type StaffMember } from '@/lib/services/staff.service';
 
 interface DashboardMetrics {
   totalSales: number;
@@ -9,12 +10,14 @@ interface DashboardMetrics {
   topSellingItems: Array<{ name: string; quantity: number; revenue: number }>;
   lowStockItems: number;
   activeOrders: number;
+  hourlyTrends: Array<{ hour: string; orders: number }>;
+  staffOnDuty: StaffMember[];
   loading: boolean;
   error: Error | null;
 }
 
 export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today') => {
-  const { currentOrganization, currentBranch } = useOrganization();
+  const { currentOrganization, currentBranch, branches } = useOrganization();
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     totalSales: 0,
     totalOrders: 0,
@@ -22,6 +25,8 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
     topSellingItems: [],
     lowStockItems: 0,
     activeOrders: 0,
+    hourlyTrends: [],
+    staffOnDuty: [],
     loading: true,
     error: null,
   });
@@ -50,12 +55,38 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
           break;
       }
 
+      // Determine branch IDs to query
+      const branchIds = currentBranch 
+        ? currentBranch.id // Single branch selected
+        : branches.map(b => b.id); // All branches for HQ view
+
+      // Validate we have branches to query
+      if (!branchIds || (Array.isArray(branchIds) && branchIds.length === 0)) {
+        console.warn('Dashboard: No branches available. Organization:', currentOrganization?.name, 'Branch count:', branches.length);
+        setMetrics({
+          totalSales: 0,
+          totalOrders: 0,
+          averageOrderValue: 0,
+          topSellingItems: [],
+          lowStockItems: 0,
+          activeOrders: 0,
+          hourlyTrends: [],
+          staffOnDuty: [],
+          loading: false,
+          error: null, // Don't show error, just show zero state
+        });
+        return;
+      }
+
       // Fetch orders for the branch or organization
-      const branchId = currentBranch?.id || '';
-      const orders = await ordersService.getOrders(branchId, {
-        startDate: startDate.toISOString(),
-        endDate: now.toISOString(),
-      });
+      const orders = await ordersService.getOrders(
+        currentOrganization.id,
+        branchIds,
+        {
+          startDate: startDate.toISOString(),
+          endDate: now.toISOString(),
+        }
+      );
 
       // Calculate metrics
       const totalSales = orders.reduce((sum, order) => {
@@ -97,6 +128,7 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
       // Get low stock items
       let lowStockCount = 0;
       if (currentBranch) {
+        // Single branch view
         try {
           const stockItems = await inventoryService.getLowStockItems(currentBranch.id);
           lowStockCount = stockItems.length;
@@ -104,6 +136,47 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
           console.error('Error fetching low stock items:', error);
           // Continue without low stock data if this fails
         }
+      } else if (branches.length > 0) {
+        // Organization-wide view
+        try {
+          const stockItems = await inventoryService.getLowStockItemsForOrganization(
+            currentOrganization.id,
+            branches.map(b => b.id)
+          );
+          lowStockCount = stockItems.length;
+        } catch (error) {
+          console.error('Error fetching organization-wide low stock items:', error);
+          // Continue without low stock data if this fails
+        }
+      }
+
+      // Get hourly trends
+      let hourlyData: Array<{ hour: string; orders: number }> = [];
+      try {
+        hourlyData = await ordersService.getHourlyTrends(
+          currentOrganization.id,
+          branchIds,
+          startDate.toISOString(),
+          now.toISOString()
+        );
+      } catch (error) {
+        console.error('Error fetching hourly trends:', error);
+        // Continue without hourly trends if this fails
+      }
+
+      // Get staff on duty
+      let staff: StaffMember[] = [];
+      try {
+        if (currentBranch) {
+          // Single branch view
+          staff = await staffService.getStaffByBranch(currentOrganization.id, currentBranch.id);
+        } else if (branches.length > 0) {
+          // Organization-wide view
+          staff = await staffService.getStaffByOrganization(currentOrganization.id);
+        }
+      } catch (error) {
+        console.error('Error fetching staff:', error);
+        // Continue without staff data if this fails
       }
 
       setMetrics({
@@ -113,6 +186,8 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
         topSellingItems: topItems,
         lowStockItems: lowStockCount,
         activeOrders: activeOrdersCount,
+        hourlyTrends: hourlyData,
+        staffOnDuty: staff,
         loading: false,
         error: null,
       });
@@ -124,7 +199,7 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
         error: error as Error,
       }));
     }
-  }, [currentOrganization, currentBranch, timeRange]);
+  }, [currentOrganization, currentBranch, branches, timeRange]);
 
   useEffect(() => {
     fetchDashboardData();

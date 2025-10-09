@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect, useContext } from "react";
 import { DropdownMenu, Avatar, TextField, Flex, Text, Link as RadixLink, Button, Box, IconButton } from "@radix-ui/themes";
-import { Bell, User, Search, Moon, Sun, Settings, LogOut, ChevronDown, Building, Store, Menu, Rocket } from "lucide-react";
+import { Bell, User, Search, Moon, Sun, Settings, LogOut, ChevronDown, Building, Store, Menu, Rocket, AlertTriangle } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { organization } from "@/data/CommonData";
-import { AppOrganizationContext } from "@/contexts/AppOrganizationContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 
 interface NotificationItem {
   icon: React.ReactNode;
@@ -14,48 +14,74 @@ interface NotificationItem {
 }
 
 interface TopBarProps {
-  isScrolled: boolean;
-  onMenuClick: () => void;
+  onMenuClick?: () => void;
 }
 
-export default function TopBar({ isScrolled, onMenuClick }: TopBarProps) {
-  const [isDropdownOpen, setDropdownOpen] = useState<boolean>(false);
+export default function TopBar({ onMenuClick }: TopBarProps) {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isDropdownOpen, setDropdownOpen] = useState(false);
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState<boolean>(false);
-  const { activeEntity, setActiveEntity } = useContext(AppOrganizationContext);
+  const { user, userProfile, signOut } = useAuth();
+  const { currentOrganization, currentBranch, branches, switchBranch } = useOrganization();
 
-  // Handle mounting state
   useEffect(() => {
-    setMounted(true);
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Handle theme toggle with localStorage update
-  const handleThemeToggle = () => {
+  const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
-    
     // Update localStorage and dispatch storage event for other components
     localStorage.setItem('theme', newTheme);
     window.dispatchEvent(new Event('storage'));
   };
 
-  const notifications: NotificationItem[] = [
-    {
-      icon: <User size={14}/>,
-      title: "New follower",
-      description: "Jane Smith started following you"
-    },
-    {
-      icon: <Rocket size={14} />,
-      title: "System Update",
-      description: "New features available"
-    },
-    {
-      icon: <Bell size={14} />,
-      title: "Reminder",
-      description: "Team meeting in 30 minutes"
-    }
-  ];
+  // Load real notifications from database
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!currentOrganization || !user) return;
+      
+      try {
+        const { notificationsService } = await import('@/lib/services');
+        const dbNotifications = await notificationsService.getNotifications(
+          currentOrganization.id,
+          user.id,
+          5 // Limit to 5 most recent
+        );
+        
+        // Convert database notifications to UI format
+        const uiNotifications: NotificationItem[] = dbNotifications.map(notification => ({
+          icon: notification.type === 'warning' ? <Bell size={14} /> : 
+                notification.type === 'error' ? <AlertTriangle size={14} /> :
+                notification.type === 'success' ? <Rocket size={14} /> :
+                <User size={14} />,
+          title: notification.title,
+          description: notification.message
+        }));
+        
+        setNotifications(uiNotifications);
+        
+        // Get unread count
+        const unreadCount = await notificationsService.getUnreadCount(
+          currentOrganization.id,
+          user.id
+        );
+        setNotificationCount(unreadCount);
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+        // Keep empty array on error
+      }
+    };
+
+    loadNotifications();
+  }, [currentOrganization, user]);
 
   return (
     <Box
@@ -89,57 +115,80 @@ export default function TopBar({ isScrolled, onMenuClick }: TopBarProps) {
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 <Button highContrast>
-                  {activeEntity?.id === 'hq' ? <Building size={14} /> : <Store size={14} />}
-                  {activeEntity?.name}
-                  <ChevronDown size={14} />
+                  <Store size={14} />
+                  {currentBranch ? currentBranch.name : currentOrganization?.name || 'Select Branch'}
+                  <ChevronDown size={12} />
                 </Button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content>
-                {organization.map((entity) => (
-                  <DropdownMenu.Item
-                    key={entity.id}
-                    onClick={() => {
-                      setActiveEntity(entity);
-                    }}
-                  >
-                    {entity.id === 'hq' ? <Building size={14} /> : <Store size={14} />}
-                    <span>{entity.name}</span>
+                <DropdownMenu.Label>
+                  <Flex align="center" gap="2">
+                    <Building size={14} />
+                    {currentOrganization?.name || 'Organization'}
+                  </Flex>
+                </DropdownMenu.Label>
+                <DropdownMenu.Separator />
+                
+                {branches.length > 0 ? (
+                  branches.map((branch) => (
+                    <DropdownMenu.Item 
+                      key={branch.id} 
+                      onSelect={() => switchBranch(branch.id)}
+                    >
+                      <Store size={14} />
+                      {branch.name}
+                      {branch.id === currentBranch?.id && " (Current)"}
+                    </DropdownMenu.Item>
+                  ))
+                ) : (
+                  <DropdownMenu.Item disabled>
+                    No branches available
                   </DropdownMenu.Item>
-                ))}
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Root>
-
-            {/* Dark mode switch */}
-            <div className="flex items-center gap-2 cursor-pointer bg-gray-100 dark:bg-neutral-800 rounded-full p-2" role="button" onClick={handleThemeToggle}>
-              {mounted && (theme === 'dark' ? <Sun size={18} className="text-gray-400 dark:text-neutral-600" /> : <Moon size={18} className="text-gray-400 dark:text-neutral-600" />)}
-            </div>
             
             {/* Notification bell */}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 <span className="relative cursor-pointer bg-gray-100 dark:bg-neutral-800 rounded-full p-2">
                   <Bell size={18} className="text-gray-400 dark:text-neutral-600" />
-                  <span className="absolute top-2 right-2 bg-red-500 text-white text-xs rounded-full w-2 h-2 flex items-center justify-center"></span>
+                  {notificationCount > 0 && (
+                    <span className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                      {notificationCount > 9 ? '9+' : notificationCount}
+                    </span>
+                  )}
                 </span>
               </DropdownMenu.Trigger>
               <DropdownMenu.Content>
-                {notifications.map((notification, index) => (
-                  <DropdownMenu.Item key={index} className="flex items-center gap-2 p-2 !cursor-pointer !h-auto group">
-                    <span className="p-2 rounded-full bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-neutral-600 dark:group-hover:bg-neutral-200">
-                      {notification.icon}
-                    </span>
-                    <div className="flex flex-col">
-                      <Text size="1" weight="medium">{notification.title}</Text>
-                      <Text size="1" className="text-gray-500 dark:text-neutral-600 group-hover:text-white">{notification.description}</Text>
+                {notifications.length > 0 ? (
+                  <>
+                    {notifications.map((notification, index) => (
+                      <DropdownMenu.Item key={index} className="flex items-center gap-2 p-2 !cursor-pointer !h-auto group">
+                        <span className="p-2 rounded-full bg-gray-100 text-gray-400 dark:bg-neutral-800 dark:text-neutral-600 dark:group-hover:bg-neutral-200">
+                          {notification.icon}
+                        </span>
+                        <div className="flex flex-col">
+                          <Text as="p" size="2" weight="medium">{notification.title}</Text>
+                          <Text as="p" size="1" color="gray">{notification.description}</Text>
+                        </div>
+                      </DropdownMenu.Item>
+                    ))}
+                    <DropdownMenu.Separator />
+                    <div className="flex justify-center">
+                      <RadixLink href="/" size="2">
+                        View all notifications
+                      </RadixLink>
+                    </div>
+                  </>
+                ) : (
+                  <DropdownMenu.Item disabled>
+                    <div className="flex flex-col items-center py-4">
+                      <Bell size={24} className="text-gray-400 mb-2" />
+                      <Text size="2" color="gray">No notifications</Text>
                     </div>
                   </DropdownMenu.Item>
-                ))}
-                <DropdownMenu.Separator />
-                <div className="flex justify-center">
-                  <RadixLink href="/" size="2">
-                    View all notifications
-                  </RadixLink>
-                </div>
+                )}
               </DropdownMenu.Content>
             </DropdownMenu.Root>
 
@@ -150,12 +199,18 @@ export default function TopBar({ isScrolled, onMenuClick }: TopBarProps) {
                   <Avatar 
                     radius="full" 
                     size="1" 
-                    src="/images/user-avatar.jpg"
-                    fallback="PB"
+                    src={userProfile?.avatar_url || undefined}
+                    fallback={userProfile?.first_name?.charAt(0) || user?.email?.charAt(0).toUpperCase() || "U"}
                   />
                   <div className="hidden lg:block">
-                    <Text as="p" size="1" weight="bold" >Peter Bryan</Text>
-                    <Text as="p" size="1" weight="medium" className="text-gray-400 dark:text-gray-400">HQ Admin</Text>
+                    <Text as="p" size="1" weight="bold">
+                      {userProfile?.first_name && userProfile?.last_name 
+                        ? `${userProfile.first_name} ${userProfile.last_name}`
+                        : user?.email || 'User'}
+                    </Text>
+                    <Text as="p" size="1" weight="medium" className="text-gray-400 dark:text-gray-400">
+                      {currentOrganization?.name || 'No Organization'}
+                    </Text>
                   </div>
                   <DropdownMenu.TriggerIcon />
                 </Flex>
@@ -168,13 +223,18 @@ export default function TopBar({ isScrolled, onMenuClick }: TopBarProps) {
                   </Link>
                 </DropdownMenu.Item>
                 <DropdownMenu.Item>
-                  <Link href="/settings" className="flex items-center gap-2"> 
+                  <Link href="/admin-settings/system-preferences" className="flex items-center gap-2">
                     <Settings size={14} />
                     <span>Settings</span>
                   </Link>
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator />
-                <DropdownMenu.Item className="flex items-center gap-2 text-red-500 dark:text-red-400 dark:hover:text-white !cursor-pointer" role="button" onClick={() => {}}>
+                <DropdownMenu.Item onClick={toggleTheme}>
+                  {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                  <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+                <DropdownMenu.Item color="red" onClick={signOut}>
                   <LogOut size={14} />
                   <span>Logout</span>
                 </DropdownMenu.Item>

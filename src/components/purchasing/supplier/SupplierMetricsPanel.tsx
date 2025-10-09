@@ -2,7 +2,9 @@
 
 import { Box, Grid } from '@radix-ui/themes';
 import { BarChart, Clock, CheckSquare, Star } from 'lucide-react';
-import { Supplier } from '@/types/inventory';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import MetricCard from '@/components/common/MetricCard';
 interface SupplierMetricsPanelProps {
   supplier: Supplier;
@@ -18,7 +20,8 @@ interface MetricCardProps {
 }
 
 export default function SupplierMetricsPanel({ supplier }: SupplierMetricsPanelProps) {
-  const performance = supplier.performance || {
+  // TODO: Load actual performance metrics from purchase order analysis
+  const performance = {
     onTimeDeliveryRate: 0,
     averageLeadTime: 0,
     orderAccuracy: 0,

@@ -1,7 +1,10 @@
 import { Box, Card, Grid, Table, Flex, Badge, Inset, Progress } from '@radix-ui/themes';
 import { ChefHat, AlertCircle, Image as ImageIcon, CookingPot, CircleX, Utensils } from 'lucide-react';
 import MetricCard from '@/components/common/MetricCard';
-import { MenuItem } from '@/data/MenuData';
+// Removed hardcoded import - using real data from database services
+import type { Database } from '@/lib/supabase/database.types';
+
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
 import Image from 'next/image';
 import CardHeading from '@/components/common/CardHeading';
 
@@ -109,13 +112,13 @@ export default function MenuDashboard({ menuMetrics, bestSellingItems, menuItems
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {menuItems.filter(item => item.stockWarning).map((item) => (
+            {menuItems.filter(item => (item as any).stockWarning).map((item) => (
               <Table.Row key={item.id}>
                 <Table.Cell>
                   <Flex align="center" gap="2">
-                    {item.imageUrl ? (
+                    {(item as any).imageUrl ? (
                       <Image
-                        src={item.imageUrl}
+                        src={(item as any).imageUrl}
                         alt={item.name}
                         width={32}
                         height={32}
@@ -130,7 +133,7 @@ export default function MenuDashboard({ menuMetrics, bestSellingItems, menuItems
                   </Flex>
                 </Table.Cell>
                 <Table.Cell>
-                  {item.ingredients.map(ing => ing.name).join(', ')}
+                  {((item as any).ingredients || []).map((ing: any) => ing.name).join(', ')}
                 </Table.Cell>
                 <Table.Cell>
                   <Badge color="red" variant="soft">Low Stock</Badge>

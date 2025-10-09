@@ -1,9 +1,17 @@
 import { Box, Button, Card, Flex, Grid, Heading, IconButton, Text, Badge, TextField, Select, TextArea, RadioGroup, Checkbox, Separator, Inset } from '@radix-ui/themes';
 import { ArrowLeft, Save, Upload, X, Image as ImageIcon, Trash, Trash2 } from 'lucide-react';
-import { MenuItem, menuCategories, dietaryLabels } from '@/data/MenuData';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded imports - using real data from database services
+import { menuService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect, useState, useRef } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
+type MenuCategory = Database['public']['Tables']['menu_categories']['Row'];
+
+// Predefined dietary labels
+const dietaryLabels = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Nut-Free', 'Halal', 'Kosher', 'Low-Carb', 'Keto', 'Organic'];
 import DateRangeInput  from '@/components/common/DateRangeInput';
-import { useState, useRef } from 'react';
 import { Range } from 'react-date-range';
 import SearchableSelect from '@/components/common/SearchableSelect';
 import { PageHeading } from '@/components/common/PageHeading';
@@ -16,28 +24,44 @@ interface MenuFormProps {
 }
 
 export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormProps) {
+  const { branches, currentOrganization } = useOrganization();
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
+  
+  // Load menu categories
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!currentOrganization?.id) return;
+      try {
+        const categories = await menuService.getCategories(currentOrganization.id);
+        setMenuCategories(categories);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+      }
+    };
+    loadCategories();
+  }, [currentOrganization?.id]);
+  
   const [formData, setFormData] = useState<Partial<MenuItem>>({
     name: selectedItem?.name || '',
-    category: selectedItem?.category || '',
-    price: selectedItem?.price || 0,
+    category_id: (selectedItem as any)?.category || '',
+    base_price: (selectedItem as any)?.price || 0,
     description: selectedItem?.description || '',
-    isSeasonal: selectedItem?.isSeasonal || false,
-    seasonalStartDate: selectedItem?.seasonalStartDate,
-    seasonalEndDate: selectedItem?.seasonalEndDate,
-    dietaryLabels: selectedItem?.dietaryLabels || [],
-    isActive: selectedItem?.isActive ?? true,
-    availableBranchesIds: selectedItem?.availableBranchesIds || [],
-    imageUrl: selectedItem?.imageUrl || ''
+    is_seasonal: (selectedItem as any)?.isSeasonal || false,
+    seasonal_start_date: (selectedItem as any)?.seasonalStartDate,
+    seasonal_end_date: (selectedItem as any)?.seasonalEndDate,
+    dietary_labels: selectedItem?.dietary_labels || [],
+    is_active: selectedItem?.is_active ?? true,
+    image_url: selectedItem?.image_url || ''
   });
 
-  const [isSeasonalItem, setIsSeasonalItem] = useState(formData.isSeasonal);
+  const [isSeasonalItem, setIsSeasonalItem] = useState(formData.is_seasonal);
   const [seasonalRange, setSeasonalRange] = useState<Range>({
-    startDate: formData.seasonalStartDate ? new Date(formData.seasonalStartDate) : undefined,
-    endDate: formData.seasonalEndDate ? new Date(formData.seasonalEndDate) : undefined,
+    startDate: formData.seasonal_start_date ? new Date(formData.seasonal_start_date) : undefined,
+    endDate: formData.seasonal_end_date ? new Date(formData.seasonal_end_date) : undefined,
     key: 'selection'
   });
-  const totalBranches = organization.filter(o => o.id !== 'hq').length;
-  const [availability, setAvailability] = useState(formData.availableBranchesIds?.length === totalBranches ? 'all' : formData.availableBranchesIds?.length > 0 ? 'selected' : 'all');
+  const totalBranches = branches.filter(b => b.id !== 'hq').length;
+  const [availability, setAvailability] = useState((formData as any).availableBranchesIds?.length === totalBranches ? 'all' : (formData as any).availableBranchesIds?.length > 0 ? 'selected' : 'all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -128,8 +152,8 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                     <TextField.Root
                       type="number"
                       step="0.01"
-                      value={formData.price}
-                      onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) }))}
+                      value={formData.base_price}
+                      onChange={(e) => setFormData(prev => ({ ...prev, base_price: parseFloat(e.target.value) }))}
                     >
                       <TextField.Slot>$</TextField.Slot>
                     </TextField.Root>
@@ -159,10 +183,10 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                     className="hidden"
                     onChange={handleImageUpload}
                   />
-                  {formData.imageUrl ? (
+                  {formData.image_url ? (
                     <Box className="relative">
                       <Image 
-                        src={formData.imageUrl} 
+                        src={formData.image_url} 
                         alt={formData.name} 
                         width={564}
                         height={317}
@@ -172,7 +196,7 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                         <Text as="p" className="text-slate-500 dark:text-neutral-600" size="2">Click or drag and drop new image to replace</Text>
                         <Button variant="soft" color="red" mt="2" onClick={(e) => {
                           e.stopPropagation();
-                          setFormData(prev => ({ ...prev, imageUrl: '' }));
+                          setFormData(prev => ({ ...prev, image_url: '' }));
                         }}>
                           Remove Image
                         </Button>
@@ -220,8 +244,8 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
               <Flex direction="column" gap="1">
                 <Text as="label" size="2" weight="medium">Category</Text>
                 <Select.Root
-                  value={formData.category}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                  value={formData.category_id}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
                 >
                   <Select.Trigger placeholder="Select Category" />
                   <Select.Content>
@@ -238,14 +262,14 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                 <SearchableSelect
                   placeholder="Select Dietary Labels"
                   options={dietaryLabels.map(label => ({
-                    value: label.id,
-                    label: label.name
+                    value: label,
+                    label: label
                   }))}
                   isMulti={true}
-                  value={formData.dietaryLabels}
+                  value={formData.dietary_labels}
                   onChange={(value) => setFormData(prev => ({ 
                     ...prev, 
-                    dietaryLabels: value ? (Array.isArray(value) ? value : [value]) : [] 
+                    dietary_labels: value ? (Array.isArray(value) ? value : [value]) : [] 
                   }))}
                 />
               </Flex>
@@ -261,8 +285,8 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                     <Flex gap="4">
                       <label className="flex items-center gap-2">
                         <RadioGroup.Root
-                          value={formData.isActive ? 'active' : 'inactive'}
-                          onValueChange={(value) => setFormData(prev => ({ ...prev, isActive: value === 'active' }))}
+                          value={formData.is_active ? 'active' : 'inactive'}
+                          onValueChange={(value) => setFormData(prev => ({ ...prev, is_active: value === 'active' }))}
                         >
                           <RadioGroup.Item value="active">Active</RadioGroup.Item>
                           <RadioGroup.Item value="inactive">Inactive</RadioGroup.Item>
@@ -290,17 +314,17 @@ export default function MenuForm({ selectedItem, onBack, onSubmit }: MenuFormPro
                       <Flex direction="column" gap="1">
                         <SearchableSelect
                           placeholder="Select Branches"
-                          options={organization.filter(o => o.id !== 'hq').map(branch => ({
+                          options={branches.filter(b => b.id !== 'hq').map(branch => ({
                             value: branch.id,
                             label: branch.name
                           }))}
                           isMulti={true}
                           usePortal={true}
-                          value={formData.availableBranchesIds}
+                          value={(formData as any).availableBranchesIds}
                           onChange={(value) => setFormData(prev => ({ 
                             ...prev, 
                             availableBranchesIds: value ? (Array.isArray(value) ? value : [value]) : [] 
-                          }))}
+                          } as any))}
                         />
                       </Flex>
                     </Box>

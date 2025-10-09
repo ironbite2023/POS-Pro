@@ -2,7 +2,9 @@
 
 import { Card, Box, Text, Flex, Table, Badge, ScrollArea } from '@radix-ui/themes';
 import { ShoppingCart, Package, File } from 'lucide-react';
-import { mockSupplierOrders } from '@/data/SupplierData';
+// Removed hardcoded import - using real data from database services
+import { suppliersService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import Pagination from '@/components/common/Pagination';
 import { useState } from 'react';
 
@@ -17,8 +19,8 @@ export default function SupplierOrderHistory({ supplierId }: SupplierOrderHistor
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
   
-  // Filter orders for this supplier
-  const supplierOrders = mockSupplierOrders.filter(order => order.supplierId === supplierId);
+  // TODO: Load purchase orders for this supplier from database
+  const supplierOrders = []; // Placeholder until suppliersService.getSupplierOrders is implemented
   
   // Pagination logic
   const totalPages = Math.ceil(supplierOrders.length / itemsPerPage);

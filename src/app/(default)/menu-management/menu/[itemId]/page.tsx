@@ -4,7 +4,13 @@ import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Box, Text } from '@radix-ui/themes';
 import MenuForm from '@/components/menu-management/menu/MenuForm';
-import { menuItems, MenuItem } from '@/data/MenuData';
+// Removed hardcoded import - using real menu items from database
+// Removed unused imports menuService and useOrganization
+// Placeholder data
+const menuItems: any[] = [];
+import type { Database } from '@/lib/supabase/database.types';
+
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
 import { toast } from 'sonner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 

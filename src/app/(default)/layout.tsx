@@ -3,12 +3,14 @@
 import { Box, Flex } from "@radix-ui/themes";
 import TopBar from "@/components/common/TopBar";
 import Sidebar from "@/components/common/Sidebar";
+import SessionTimeoutWarning from "@/components/common/SessionTimeoutWarning";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { Text } from "@radix-ui/themes";
 import { ProtectedRoute } from "@/components/common/ProtectedRoute";
+import { PermissionUtils } from "@/lib/utils/permissions";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [_isScrolled, setIsScrolled] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const sidebarWidth = '260px';
   
@@ -31,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }, [onScroll]);
   
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requirements={PermissionUtils.REQUIREMENTS.VIEW_DASHBOARD}>
       <Box className="flex flex-col h-screen overflow-x-hidden">
         {/* Backdrop for mobile */}
         {isSidebarOpen && (
@@ -55,7 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           data-main-content
         >
           {/* Top bar */}
-          <TopBar isScrolled={isScrolled} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
+          <TopBar onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} />
           
           {/* Page content */}
           <Box className="flex-1 overflow-y-auto">
@@ -73,6 +75,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Flex>
           </Box>
         </Box>
+        
+        {/* Session timeout warning modal */}
+        <SessionTimeoutWarning />
       </Box>
     </ProtectedRoute>
   );

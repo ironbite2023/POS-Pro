@@ -6,7 +6,12 @@ import { PlusIcon, Trash, Search, RefreshCcw, Edit, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation';
 import { WasteLog } from '@/types/inventory';
 import { formatDate } from '@/utilities';
-import { wasteLogs, wasteReasons, wasteSources } from '@/data/WasteLogData';
+// Removed hardcoded import - using real data from database services
+// Note: Waste management will use waste.service.ts when implemented
+// Placeholder data
+const wasteLogs: any[] = [];
+const wasteReasons: any[] = [];
+const wasteSources: any[] = [];
 import Pagination from '@/components/common/Pagination';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';

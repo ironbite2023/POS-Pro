@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { Box, Flex, Text, Button, Tabs, Badge, AlertDialog } from '@radix-ui/themes';
 import { CheckCircle, Save, XCircle, X, FileText, Clock, History, Trash2 } from 'lucide-react';
-import { Supplier } from '@/types/inventory';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import SupplierMetricsPanel from '@/components/purchasing/supplier/SupplierMetricsPanel';
 import SupplierGeneralInfo from '@/components/purchasing/supplier/SupplierGeneralInfo';
 import SupplierOrderHistory from '@/components/purchasing/supplier/SupplierOrderHistory';
@@ -18,21 +20,19 @@ interface SupplierDetailsProps {
   onDelete?: (id: string) => void;
 }
 
-// Default blank supplier
-const defaultNewSupplier: Supplier = {
+// Default blank supplier matching database schema
+const defaultNewSupplier: Partial<Supplier> = {
   id: '',
   name: '',
-  category: 'Vegetables',
-  contactPerson: '',
+  contact_name: '',
   phone: '',
   email: '',
-  address: '',
-  lastOrderDate: new Date(),
-  totalOrders: 0,
-  active: true,
-  averageDeliveryTime: 0,
-  businessHours: [],
-  notes: ''
+  address: null,
+  payment_terms: '',
+  is_active: true,
+  organization_id: '', // Will be set from context
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString()
 };
 
 export default function SupplierDetails({ editingItem, onSubmit, onCancel, onDelete }: SupplierDetailsProps) {
@@ -42,13 +42,13 @@ export default function SupplierDetails({ editingItem, onSubmit, onCancel, onDel
   
   // Initialize state based on props
   const [supplier, setSupplier] = useState<Supplier>(
-    editingItem ? { ...editingItem } : defaultNewSupplier
+    editingItem ? { ...editingItem } : defaultNewSupplier as Supplier
   );
   const [activeTab, setActiveTab] = useState<string>('general');
 
   // Reset state if editingItem changes (e.g., navigating between edit pages)
   useEffect(() => {
-    setSupplier(editingItem ? { ...editingItem } : defaultNewSupplier);
+    setSupplier(editingItem ? { ...editingItem } : defaultNewSupplier as Supplier);
     setActiveTab('general');
   }, [editingItem]);
 
@@ -77,7 +77,7 @@ export default function SupplierDetails({ editingItem, onSubmit, onCancel, onDel
           noMarginBottom
           showBackButton={true}
           onBackClick={onCancel}
-          badge={ !isNewSupplier && (supplier.active ? 
+          badge={ !isNewSupplier && (supplier.is_active ? 
             <Badge color="green">
               <CheckCircle className="h-3 w-3" />
               Active
@@ -126,8 +126,11 @@ export default function SupplierDetails({ editingItem, onSubmit, onCancel, onDel
             
             {activeTab === 'business-hours' && (
               <SupplierBusinessHours 
-                businessHours={supplier.businessHours || []} 
-                onUpdate={(hours) => handleUpdate({ businessHours: hours })} 
+                businessHours={[]} 
+                onUpdate={(hours) => {
+                  // TODO: Implement business hours storage when schema is extended
+                  console.log('Business hours update:', hours);
+                }} 
               />
             )}
             

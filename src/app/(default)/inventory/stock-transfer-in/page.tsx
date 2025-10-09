@@ -11,8 +11,8 @@ import {
   Badge,
 } from '@radix-ui/themes';
 import { Search, RefreshCcw } from 'lucide-react';
-import { organization } from '@/data/CommonData';
-import { StockRequest, mockStockRequests } from '@/data/StockRequestData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { StockRequestFormData } from '@/types/inventory';
 import StockTransferInTable from '@/components/inventory/StockTransferInTable';
 import Pagination from '@/components/common/Pagination';
 import { useRouter } from 'next/navigation';
@@ -20,14 +20,15 @@ import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
 const ITEMS_PER_PAGE = 10;
-const RELEVANT_STATUS = 'Delivering';
+const RELEVANT_STATUS = 'Approved'; // Updated to match StockRequestStatus types
 const ASSUMED_DESTINATION = 'br-1'; // assumed destination branch
 
 function StockTransferInContent() {
-  // Initialize with all stock requests
-  const [allStockRequests] = useState<StockRequest[]>(mockStockRequests);
+  const { branches } = useOrganization();
+  // Initialize with empty array - in real implementation would load from service
+  const [allStockRequests] = useState<StockRequestFormData[]>([]);
   // Filtered requests based on search/filters
-  const [filteredRequests, setFilteredRequests] = useState<StockRequest[]>([]);
+  const [filteredRequests, setFilteredRequests] = useState<StockRequestFormData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [originFilter, setOriginFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -49,7 +50,7 @@ function StockTransferInContent() {
       result = result.filter(
         request =>
           request.requestNumber.toLowerCase().includes(term) ||
-          (organization.find(org => org.id === request.originId)?.name.toLowerCase() || '').includes(term)
+          (branches?.find(b => b.id === request.originId)?.name.toLowerCase() || '').includes(term)
       );
     }
 
@@ -60,10 +61,15 @@ function StockTransferInContent() {
 
     setFilteredRequests(result);
     setCurrentPage(1);
-  }, [allStockRequests, searchTerm, originFilter]);
+  }, [allStockRequests, searchTerm, originFilter, branches]);
 
-  // Handle process button click
-  const handleProcessClick = (request: StockRequest) => {
+  // Handle receive button click - updated to match component interface
+  const handleReceiveClick = (requestId: string) => {
+    router.push(`/inventory/stock-transfer-in/${requestId}`);
+  };
+
+  // Handle view button click - updated to match component interface
+  const handleViewClick = (request: StockRequestFormData) => {
     router.push(`/inventory/stock-transfer-in/${request.id}`);
   };
 
@@ -86,7 +92,7 @@ function StockTransferInContent() {
         <PageHeading 
           title="Stock Transfer In" 
           description="Process and receive incoming stock transfers."
-          badge={<Badge>Destination: {organization.find(org => org.id === ASSUMED_DESTINATION)?.name}</Badge>}
+          badge={<Badge>Destination: {branches?.find(b => b.id === ASSUMED_DESTINATION)?.name || 'Current Branch'}</Badge>}
           noMarginBottom
         />
       </Flex>
@@ -111,9 +117,9 @@ function StockTransferInContent() {
               <Select.Trigger placeholder="All Origins" />
               <Select.Content>
                 <Select.Item value="all">All Origins</Select.Item>
-                {organization.filter(org => org.id !== ASSUMED_DESTINATION).map(org => (
-                  <Select.Item key={org.id} value={org.id}>
-                    {org.name}
+                {branches.filter(b => b.id !== ASSUMED_DESTINATION).map(branch => (
+                  <Select.Item key={branch.id} value={branch.id}>
+                    {branch.name}
                   </Select.Item>
                 ))}
               </Select.Content>
@@ -134,7 +140,8 @@ function StockTransferInContent() {
 
       <StockTransferInTable
         stockRequests={paginatedRequests}
-        onProcess={handleProcessClick}
+        onReceive={handleReceiveClick}
+        onView={handleViewClick}
       />
 
       {filteredRequests.length > 0 && (

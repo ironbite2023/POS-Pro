@@ -9,7 +9,7 @@ import { useTheme } from "next-themes";
 import clsx from 'clsx';
 import {
   IconDot, IconDashboard, IconSales, IconUI, IconPages, IconMenuLevel, IconDocs, 
-  IconSupport, IconMenu, IconInventory, IconSettings, IconWaste, IconLoyalty, IconPurchasing 
+  IconSupport, IconMenu, IconInventory, IconSettings, IconWaste, IconLoyalty, IconPurchasing, IconDeveloper 
 } from './MenuIcons';
 
 // Define types for menu items
@@ -347,6 +347,18 @@ export default function Sidebar({ width, onClose }: SidebarProps) {
         { title: "System Preferences", link: "/admin-settings/system-preferences" },
         { title: "Backup & Restore", link: "/admin-settings/backup-restore" },
         { title: "System Logs", link: "/admin-settings/system-logs" },
+      ],
+    },
+    {
+      title: "Developer Hub",
+      icon: <IconDeveloper />,
+      link: "#",
+      subMenu: [
+        { title: "Infrastructure Monitor", link: "/developer" },
+        { title: "Delivery Testing", link: "/developer/delivery-testing" },
+        { title: "Webhook Monitor", link: "/developer/delivery-testing/webhook-monitor" },
+        { title: "Queue Manager", link: "/developer/delivery-testing/queue-manager" },
+        { title: "Integration Validator", link: "/developer/delivery-testing/integration-validator" },
       ],
     },
   ], []);

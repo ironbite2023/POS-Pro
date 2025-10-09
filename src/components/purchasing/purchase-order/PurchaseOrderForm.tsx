@@ -19,15 +19,36 @@ import {
   AlertDialog
 } from '@radix-ui/themes';
 import { CheckSquare, Save, FileText, Truck, DollarSign, X, Plus, Trash2 } from 'lucide-react';
-import { PurchaseOrder, PurchaseOrderItem, ReceivingLog } from '@/data/PurchaseOrderData';
-import { mockSuppliers } from '@/data/SupplierData';
+// Removed hardcoded imports - using real data from database services
+import { suppliersService, type PurchaseOrderWithItems } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
+
+type PurchaseOrder = Database['public']['Tables']['purchase_orders']['Row'];
+type PurchaseOrderItem = Database['public']['Tables']['purchase_order_items']['Row'];
+
+// Receiving Log type for purchase order receiving tracking
+interface ReceivingLog {
+  id: string;
+  date: string;
+  quantityReceived: number;
+  receivedBy: string;
+  notes?: string;
+  itemName: string;
+  itemSku: string;
+  expiryDate?: string;
+  storageLocation?: string;
+}
+
 import { formatDate } from '@/utilities';
 import SelectSupplierDialog from './SelectSupplierDialog';
 import DateInput from '@/components/common/DateInput';
 import AddItemDialog from './AddItemDialog';
 import AddReceivingLog from './AddReceivingLog';
 import SearchableSelect from '@/components/common/SearchableSelect';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded organization import - using real organization from context
 import { PageHeading } from '@/components/common/PageHeading';
 import CardHeading from '@/components/common/CardHeading';
 
@@ -46,6 +67,26 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
   const [itemToEdit, setItemToEdit] = useState<PurchaseOrderItem | null>(null);
   const [isAddReceivingLogOpen, setIsAddReceivingLogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const { currentOrganization } = useOrganization();
+  
+  // Load suppliers
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const supplierData = await suppliersService.getSuppliers(currentOrganization.id);
+        setSuppliers(supplierData);
+      } catch (error) {
+        console.error('Error loading suppliers:', error);
+        setSuppliers([]);
+      }
+    };
+
+    loadSuppliers();
+  }, [currentOrganization]);
+  
   // Date states
   const [orderDate, setOrderDate] = useState<Date | undefined>(undefined);
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState<Date | undefined>(undefined);
@@ -53,43 +94,41 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   const isNewPO = !editingItem;
-  const isEditable = isNewPO || editingItem?.orderStatus === 'Draft';
+  const isEditable = isNewPO || editingItem?.status === 'Draft';
   
   useEffect(() => {
     if (isNewPO) {
       const today = new Date();
       const newPO: Partial<PurchaseOrder> = {
-        dateCreated: today.toISOString().slice(0, 10),
-        orderStatus: 'Draft',
-        paymentStatus: null,
-        orderedBy: 'Current User',
-        organizationId: '',
-        supplierDetails: {
-          contactName: '',
-          contactEmail: '',
-          contactPhone: '',
-          address: ''
-        },
-        orderItems: [],
-        totalOrderValue: 0,
-        supplierConfirmed: false
+        created_at: today.toISOString(),
+        order_date: today.toISOString().slice(0, 10),
+        status: 'Draft',
+        created_by: 'current-user-id', // TODO: Get actual user ID from context
+        organization_id: '', // TODO: Get from organization context
+        po_number: '', // TODO: Generate PO number
+        supplier_id: '',
+        total_amount: 0,
+        notes: '',
+        branch_id: '', // TODO: Get from branch context
+        expected_delivery_date: ''
       };
       setEditForm(newPO);
       setOrderDate(today);
     } else if (editingItem) {
       setEditForm(editingItem);
       
-      if (editingItem.dateCreated) {
-        setOrderDate(new Date(editingItem.dateCreated));
+      if (editingItem.order_date) {
+        setOrderDate(new Date(editingItem.order_date));
       }
       
-      if (editingItem.expectedDeliveryDate) {
-        setExpectedDeliveryDate(new Date(editingItem.expectedDeliveryDate));
+      if (editingItem.expected_delivery_date) {
+        setExpectedDeliveryDate(new Date(editingItem.expected_delivery_date));
       }
       
-      if (editingItem.paymentDetails?.datePaid) {
-        setDatePaid(new Date(editingItem.paymentDetails.datePaid));
-      }
+      // TODO: Handle payment details when payment schema is implemented
+      // if (editingItem.paymentDetails?.datePaid) {
+      //   setDatePaid(new Date(editingItem.paymentDetails.datePaid));
+      // }
     }
   }, [editingItem, isNewPO]);
   
@@ -100,32 +139,26 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
   };
   
   const handleSupplierSelect = (supplierId: string) => {
-    const supplier = mockSuppliers.find(s => s.id === supplierId);
+    const supplier = suppliers.find(s => s.id === supplierId);
     if (supplier) {
       setEditForm({
         ...editForm,
-        supplierName: supplier.name,
-        supplierId: supplier.id,
-        supplierDetails: {
-          contactName: supplier.contactPerson,
-          contactEmail: supplier.email,
-          contactPhone: supplier.phone,
-          address: supplier.address
-        }
+        supplier_id: supplier.id
+        // TODO: Handle supplier details display separately since they're not part of PurchaseOrder schema
       });
       setIsSupplierDialogOpen(false);
     }
   };
   
   const handleAddItem = (item: PurchaseOrderItem) => {
-    const currentItems = editForm.orderItems || [];
+    const currentItems = []; // TODO: Load purchase order items from separate table
     const newItems = [...currentItems, item];
-    const newTotalValue = newItems.reduce((total, item) => total + (item.quantityOrdered * item.unitPrice), 0);
+    const newTotalValue = newItems.reduce((total, item) => total + (item.quantity_ordered * item.unit_cost), 0);
     
     setEditForm({
       ...editForm,
-      orderItems: newItems,
-      totalOrderValue: newTotalValue
+      total_amount: newTotalValue
+      // TODO: Save purchase order items to separate table
     });
   };
 
@@ -135,18 +168,18 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
   };
 
   const handleDeleteItem = (itemId: string) => {
-    const currentItems = editForm.orderItems || [];
+    const currentItems = []; // TODO: Load purchase order items from separate table
     const newItems = currentItems.filter(item => item.id !== itemId);
-    const newTotalValue = newItems.reduce((total, item) => total + (item.quantityOrdered * item.unitPrice), 0);
+    const newTotalValue = newItems.reduce((total, item) => total + (item.quantity_ordered * item.unit_cost), 0);
     
     setEditForm({
       ...editForm,
-      orderItems: newItems,
-      totalOrderValue: newTotalValue
+      total_amount: newTotalValue
+      // TODO: Save purchase order items to separate table
     });
   };
   
-  const getStatusColor = (status: PurchaseOrder['orderStatus']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'Draft': return 'gray';
       case 'Pending': return 'amber';
@@ -158,7 +191,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
     }
   };
   
-  const getPaymentStatusColor = (status: PurchaseOrder['paymentStatus']) => {
+  const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case 'Paid': return 'green';
       case 'Partially Paid': return 'amber';
@@ -168,31 +201,13 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
   };
   
   const handleAddReceivingLog = (log: ReceivingLog) => {
-    const currentLogs = editForm.receivingLogs || [];
-    const newLogs = [...currentLogs, log];
-    
-    // Also update the received quantity for the corresponding item
-    const updatedItems = editForm.orderItems?.map(item => {
-      if (item.itemName === log.itemName) {
-        return {
-          ...item,
-          receivedQuantity: (item.receivedQuantity || 0) + log.quantityReceived
-        };
-      }
-      return item;
-    }) || [];
-    
-    setEditForm({
-      ...editForm,
-      receivingLogs: newLogs,
-      orderItems: updatedItems,
-      // If all items are fully received, update order status
-      orderStatus: isAllItemsReceived(updatedItems) ? 'Delivered' : 'Partially Received'
-    });
+    // TODO: Implement proper receiving log handling with database schema
+    // For now, just close the dialog - full implementation needed when schema is ready
+    console.log('Received log:', log);
   };
   
   const isAllItemsReceived = (items: PurchaseOrderItem[]) => {
-    return items.every(item => item.receivedQuantity >= item.quantityOrdered);
+    return items.every(item => (item.quantity_received || 0) >= item.quantity_ordered);
   };
   
   const poData = editForm;
@@ -215,22 +230,20 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
         mb="4"
       >
         <PageHeading
-          title={isNewPO ? 'New Purchase Order' : poData?.poNumber} 
+          title={isNewPO ? 'New Purchase Order' : poData?.po_number} 
           description={isNewPO ? 'Create a new purchase order' : 'View/edit purchase order'}
           showBackButton={true}
           onBackClick={onCancel}
           noMarginBottom
           badge={
             <>
-              {poData?.orderStatus && (
-                <Badge color={getStatusColor(poData.orderStatus)}>{poData.orderStatus}</Badge>
+              {poData?.status && (
+                <Badge color={getStatusColor(poData.status)}>{poData.status}</Badge>
               )}
-              {poData?.paymentStatus && (
-                <Badge color={getPaymentStatusColor(poData.paymentStatus)}>{poData.paymentStatus}</Badge>
-              )}
-              {poData?.organizationId && (
+              {/* TODO: Add payment status when payment schema is implemented */}
+              {poData?.organization_id && (
                 <Badge color="blue">
-                  {organization.find(org => org.id === poData.organizationId)?.name || ''}
+                  Organization: {poData.organization_id.slice(0, 8)}...
                 </Badge>
               )}
             </>
@@ -275,11 +288,11 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 <Grid columns={{ initial: "1", sm: "2" }} gap="4">
                   <Flex direction="column" gap="1">
                     <Text as="label" size="2" weight="medium">PO Number</Text>
-                    <Text>{isNewPO ? 'Auto-generated' : poData?.poNumber}</Text>
+                                          <Text>{isNewPO ? 'Auto-generated' : poData?.po_number}</Text>
                   </Flex>
                   <Flex direction="column" gap="1">
                     <Text as="label" size="2" weight="medium">Ordered By</Text>
-                    <Text>{poData?.orderedBy}</Text>
+                                          <Text>{poData?.created_by || 'Unknown'}</Text>
                   </Flex>
                 </Grid>
                 <Flex direction="column" gap="1">
@@ -292,7 +305,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                         if (date) {
                           setEditForm({
                             ...editForm,
-                            dateCreated: date.toISOString().slice(0, 10)
+                                                          order_date: date.toISOString().slice(0, 10)
                           });
                         }
                       }}
@@ -304,18 +317,17 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 </Flex>
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Ordered For</Text>
-                  <SearchableSelect
-                    options={organization.map(org => ({ value: org.id, label: org.name }))}
-                    value={editForm.organizationId || ''}
-                    onChange={(value) => {
+                  <TextField.Root 
+                    value={editForm.organization_id || ''}
+                    onChange={(e) => {
                       if (!isEditable) return;
                       setEditForm({
                         ...editForm,
-                        organizationId: value as string
+                        organization_id: e.target.value
                       });
                     }}
-                    placeholder="Select organization or branch"
-                    isDisabled={!isEditable}
+                    placeholder="Organization ID"
+                    readOnly={!isEditable}
                   />
                 </Flex>
                 <Flex direction="column" gap="1">
@@ -328,7 +340,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                         if (date) {
                           setEditForm({
                             ...editForm,
-                            expectedDeliveryDate: date.toISOString().slice(0, 10)
+                                                          expected_delivery_date: date.toISOString().slice(0, 10)
                           });
                         }
                       }}
@@ -352,7 +364,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                     gap={{ initial: "2", sm: "2" }}
                   >
                     <TextField.Root 
-                      value={editForm.supplierName || ''}
+                      value={editForm.supplier_id || 'No supplier selected'}
                       readOnly
                       placeholder="Select a supplier"
                       className="w-full"
@@ -365,28 +377,32 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Contact Name</Text>
                   <TextField.Root 
-                    value={editForm.supplierDetails?.contactName || ''}
+                    value=""
+                    placeholder="Contact name will load when supplier integration is complete"
                     readOnly
                   />
                 </Flex>
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Contact Email</Text>
                   <TextField.Root 
-                    value={editForm.supplierDetails?.contactEmail || ''}
+                    value=""
+                    placeholder="Contact email will load when supplier integration is complete"
                     readOnly
                   />
                 </Flex>
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Contact Phone</Text>
                   <TextField.Root 
-                    value={editForm.supplierDetails?.contactPhone || ''}
+                    value=""
+                    placeholder="Contact phone will load when supplier integration is complete"
                     readOnly
                   />
                 </Flex>
                 <Flex direction="column" gap="1" gridColumn={{ initial: "1", sm: "1 / 3" }}>
                   <Text as="label" size="2" weight="medium">Address</Text>
                   <TextArea 
-                    value={editForm.supplierDetails?.address || ''}
+                    value=""
+                    placeholder="Address will load when supplier integration is complete"
                     readOnly
                   />
                 </Flex>
@@ -444,8 +460,9 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {editForm.orderItems && editForm.orderItems.length > 0 ? (
-                      editForm.orderItems.map((item) => (
+                    {/* TODO: Load and display purchase order items from separate table */}
+                    {false ? (
+                      [].map((item) => (
                         <Table.Row key={item.id}>
                           <Table.Cell>{item.itemName}</Table.Cell>
                           <Table.Cell align="right">{item.quantityOrdered}</Table.Cell>
@@ -490,7 +507,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
               </div>
               <Flex justify="end" mt="4">
                 <Box p="2" style={{ textAlign: 'right' }}>
-                  <Text weight="bold">Total Order Value: ${editForm.totalOrderValue?.toFixed(2) || '0.00'}</Text>
+                  <Text weight="bold">Total Order Value: ${editForm.total_amount?.toFixed(2) || '0.00'}</Text>
                 </Box>
               </Flex>
             </Card>
@@ -506,12 +523,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                   <Flex direction="column" gap="1">
                     <Text as="label" size="2" weight="medium">Current Status</Text>
                     <Select.Root 
-                      value={editForm.orderStatus}
+                                              value={editForm.status}
                       onValueChange={(value) => {
                         if (!isEditable) return;
                         setEditForm({
                           ...editForm, 
-                          orderStatus: value as PurchaseOrder['orderStatus']
+                                                      status: value
                         });
                       }}
                       disabled={!isEditable}
@@ -531,12 +548,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                   <Flex direction="column" gap="1">
                     <Text as="label" size="2" weight="medium">Supplier Confirmation</Text>
                     <Select.Root 
-                      value={editForm.supplierConfirmed ? 'yes' : 'no'}
+                                              value="no" // TODO: Implement supplier confirmation in database schema
                       onValueChange={(value) => {
                         if (!isEditable) return;
                         setEditForm({
                           ...editForm, 
-                          supplierConfirmed: value === 'yes'
+                                                      // TODO: Handle supplier confirmation when schema is implemented
                         });
                       }}
                       disabled={!isEditable}
@@ -554,15 +571,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                   <Flex direction="column" gap="1">
                     <Text as="label" size="2" weight="medium">Tracking Number</Text>
                     <TextField.Root 
-                      value={editForm.shippingDetails?.trackingNumber || ''}
+                                              value="" // TODO: Implement tracking when shipping schema is added
                       onChange={(e) => {
                         if (!isEditable) return;
                         setEditForm({
                           ...editForm, 
-                          shippingDetails: {
-                            ...editForm.shippingDetails || {},
-                            trackingNumber: e.target.value
-                          }
+                                                      // TODO: Handle shipping details when schema is implemented
                         });
                       }}
                       readOnly={!isEditable}
@@ -573,15 +587,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                     <TextField.Root 
                       type="number"
                       min="1"
-                      value={editForm.shippingDetails?.estimatedDeliveryTime || ''}
+                                              value="" // TODO: Implement delivery time estimation when shipping schema is added
                       onChange={(e) => {
                         if (!isEditable) return;
                         setEditForm({
                           ...editForm, 
-                          shippingDetails: {
-                            ...editForm.shippingDetails || {},
-                            estimatedDeliveryTime: e.target.value
-                          }
+                                                      // TODO: Handle shipping details when schema is implemented
                         });
                       }}
                       readOnly={!isEditable}
@@ -608,8 +619,8 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                      {editForm.receivingLogs && editForm.receivingLogs.length > 0 ? (
-                        editForm.receivingLogs.map((log) => (
+                                              {false ? ( // TODO: Load receiving logs when schema is implemented
+                          [].map((log) => (
                           <Table.Row key={log.id}>
                             <Table.Cell>{log.itemName}</Table.Cell>
                             <Table.Cell>{log.itemSku}</Table.Cell>
@@ -632,12 +643,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                   </Table.Root>
                 </div>
                 
-                {(editForm.orderStatus === 'In Progress' || editForm.orderStatus === 'Partially Received') && (
+                                  {(editForm.status === 'In Progress' || editForm.status === 'Partially Received') && (
                   <Button 
                     mt="3" 
                     variant="soft" 
                     onClick={() => setIsAddReceivingLogOpen(true)}
-                    disabled={!isEditable && !(editForm.orderStatus === 'In Progress' || editForm.orderStatus === 'Partially Received')}
+                    disabled={!isEditable && !(editForm.status === 'In Progress' || editForm.status === 'Partially Received')}
                   >
                     Add Receiving Log
                   </Button>
@@ -654,18 +665,18 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
               <Grid columns={{ initial: "1", sm: "2" }} gap="4" width="auto">
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Total Order Cost</Text>
-                  <Text size="4" weight="bold">${editForm.totalOrderValue?.toFixed(2) || '0.00'}</Text>
+                  <Text size="4" weight="bold">${editForm.total_amount?.toFixed(2) || '0.00'}</Text>
                 </Flex>
                 
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Payment Status</Text>
                   <Select.Root 
-                    value={editForm.paymentStatus}
+                                          value="" // TODO: Implement payment status when payment schema is added
                     onValueChange={(value) => {
                       if (!isEditable) return;
                       setEditForm({
                         ...editForm, 
-                        paymentStatus: value as PurchaseOrder['paymentStatus']
+                                                  // TODO: Handle payment status when schema is implemented
                       });
                     }}
                     disabled={!isEditable}
@@ -682,15 +693,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Payment Terms</Text>
                   <Select.Root 
-                    value={editForm.paymentDetails?.paymentTerms}
+                                          value="" // TODO: Load payment terms when payment schema is implemented
                     onValueChange={(value) => {
                       if (!isEditable) return;
                       setEditForm({
                         ...editForm, 
-                        paymentDetails: {
-                          ...editForm.paymentDetails || { paymentTerms: '' },
-                          paymentTerms: value
-                        }
+                                                  // TODO: Handle payment details when schema is implemented
                       });
                     }}
                     disabled={!isEditable}
@@ -708,15 +716,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Invoice Number</Text>
                   <TextField.Root 
-                    value={editForm.paymentDetails?.invoiceNumber || ''}
+                                          value="" // TODO: Load invoice number when payment schema is implemented
                     onChange={(e) => {
                       if (!isEditable) return;
                       setEditForm({
                         ...editForm, 
-                        paymentDetails: {
-                          ...editForm.paymentDetails || { paymentTerms: '' },
-                          invoiceNumber: e.target.value
-                        }
+                                                  // TODO: Handle payment details when schema is implemented
                       });
                     }}
                     readOnly={!isEditable}
@@ -726,15 +731,12 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                 <Flex direction="column" gap="1">
                   <Text as="label" size="2" weight="medium">Payment Method</Text>
                   <Select.Root 
-                    value={editForm.paymentDetails?.paymentMethod}
+                                          value="" // TODO: Load payment method when payment schema is implemented
                     onValueChange={(value) => {
                       if (!isEditable) return;
                       setEditForm({
                         ...editForm, 
-                        paymentDetails: {
-                          ...editForm.paymentDetails || { paymentTerms: '' },
-                          paymentMethod: value as PurchaseOrder['paymentDetails']['paymentMethod']
-                        }
+                                                  // TODO: Handle payment details when schema is implemented
                       });
                     }}
                     disabled={!isEditable}
@@ -759,10 +761,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
                         if (date) {
                           setEditForm({
                             ...editForm,
-                            paymentDetails: {
-                              ...editForm.paymentDetails || { paymentTerms: '' },
-                              datePaid: date.toISOString().slice(0, 10)
-                            }
+                                                          // TODO: Handle payment details when schema is implemented
                           });
                         }
                       }}
@@ -801,7 +800,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
             </>
           ) : null}
         </Flex>
-        {isEditable && editingItem?.orderStatus === 'Draft' && (
+                  {isEditable && editingItem?.status === 'Draft' && (
           <Button 
             variant="soft" 
             color="red" 
@@ -854,7 +853,7 @@ export default function PurchaseOrderForm({ editingItem, onSubmit, onCancel, onD
         open={isAddReceivingLogOpen}
         onOpenChange={setIsAddReceivingLogOpen}
         onAddLog={handleAddReceivingLog}
-        availableItems={editForm.orderItems || []}
+        availableItems={[]} // TODO: Load available items from purchase order items table
       />
     </Box>
   );

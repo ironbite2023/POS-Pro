@@ -56,16 +56,20 @@ export const useSalesData = (params: SalesDataParams = {}): UseSalesDataReturn =
   } = params;
 
   const fetchSalesData = useCallback(async () => {
-    if (!currentBranch?.id) return;
+    if (!currentOrganization?.id || !currentBranch?.id) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const ordersData = await ordersService.getOrders(currentBranch.id, {
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-      });
+      const ordersData = await ordersService.getOrders(
+        currentOrganization.id,
+        currentBranch.id,
+        {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }
+      );
 
       setOrders(ordersData);
     } catch (err) {
@@ -74,7 +78,7 @@ export const useSalesData = (params: SalesDataParams = {}): UseSalesDataReturn =
     } finally {
       setLoading(false);
     }
-  }, [currentBranch?.id, startDate, endDate]);
+  }, [currentOrganization?.id, currentBranch?.id, startDate, endDate]);
 
   useEffect(() => {
     fetchSalesData();

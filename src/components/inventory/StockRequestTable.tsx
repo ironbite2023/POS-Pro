@@ -3,30 +3,38 @@
 import React, { useState, useMemo } from 'react';
 import { Table, Flex, Text, Badge, IconButton } from '@radix-ui/themes';
 import { Trash2, FileText, Edit } from 'lucide-react';
-import { StockRequest, StockRequestStatus } from '@/data/StockRequestData';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
 import { formatDate } from '@/utilities';
-import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { SortableHeader } from '@/components/common/SortableHeader';
+import { 
+  StockRequestFormData, 
+  StockRequestStatus,
+  SortConfig,
+  SortableStockRequestField
+} from '@/types/inventory';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 
 interface StockRequestTableProps {
-  stockRequests: StockRequest[];
-  onEdit: (request: StockRequest) => void;
-  onDelete: (id: string) => void;
-  onView: (request: StockRequest) => void;
+  stockRequests: StockRequestFormData[];
+  onEdit?: (request: StockRequestFormData) => void;
+  onDelete?: (id: string) => void;
+  onView?: (request: StockRequestFormData) => void;
+  readOnly?: boolean;
 }
 
 const StockRequestTable: React.FC<StockRequestTableProps> = ({
-  stockRequests,
+  stockRequests = [],
   onEdit,
-  onDelete,
-  onView
+  onDelete, 
+  onView,
+  readOnly = false
 }) => {
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [requestToDelete, setRequestToDelete] = useState<StockRequest | null>(null);
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  
-  const handleSort = (key: string) => {
+  const { branches } = useOrganization();
+  const [sortConfig, setSortConfig] = useState<SortConfig<StockRequestFormData> | null>(null);
+
+  const handleSort = (key: SortableStockRequestField) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
@@ -34,202 +42,188 @@ const StockRequestTable: React.FC<StockRequestTableProps> = ({
     setSortConfig({ key, direction });
   };
 
-  const getBranchName = (id: string) => {
-    const entity = organization.find(org => org.id === id);
-    return entity ? entity.name : 'Unknown';
-  };
-
   const sortedRequests = useMemo(() => {
     if (!sortConfig) return stockRequests;
 
     return [...stockRequests].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
 
-      switch (sortConfig.key) {
-        case 'requestNumber':
-          aValue = a.requestNumber;
-          bValue = b.requestNumber;
-          break;
-        case 'date':
-          aValue = new Date(a.date).getTime();
-          bValue = new Date(b.date).getTime();
-          break;
-        case 'origin':
-          aValue = getBranchName(a.originId);
-          bValue = getBranchName(b.originId);
-          break;
-        case 'destination':
-          aValue = getBranchName(a.destinationId);
-          bValue = getBranchName(b.destinationId);
-          break;
-        case 'status':
-          aValue = a.status;
-          bValue = b.status;
-          break;
-        default:
-          return 0;
+      // Handle string comparisons
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
 
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
+      // Handle date comparisons 
+      if (sortConfig.key === 'date' || sortConfig.key === 'requiredDate' || sortConfig.key === 'createdAt' || sortConfig.key === 'updatedAt') {
+        if (!aValue && !bValue) return 0;
+        if (!aValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        if (!bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        
+        const aDate = new Date(aValue as Date).getTime();
+        const bDate = new Date(bValue as Date).getTime();
+        const comparison = aDate - bDate;
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
+
+      // Handle number comparisons
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        const comparison = aValue - bValue;
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
+
       return 0;
     });
   }, [stockRequests, sortConfig]);
-  
-  const handleDeleteClick = (request: StockRequest) => {
-    setRequestToDelete(request);
-    setDeleteDialogOpen(true);
+
+  const getBranchName = (branchId: string): string => {
+    return branches?.find((branch: Branch) => branch.id === branchId)?.name || 'Unknown Branch';
   };
-  
-  const confirmDelete = () => {
-    if (requestToDelete) {
-      onDelete(requestToDelete.id);
-    }
-  };
-  
+
   const getStatusBadge = (status: StockRequestStatus) => {
-    switch (status) {
-      case 'New':
-        return <Badge color="blue">New</Badge>;
-      case 'Rejected':
-        return <Badge color="red">Rejected</Badge>;
-      case 'Approved':
-        return <Badge color="green">Approved</Badge>;
-      case 'Delivering':
-        return <Badge color="orange">Delivering</Badge>;
-      case 'Completed':
-        return <Badge color="green">Completed</Badge>;
-      default:
-        return <Badge color="gray">{status}</Badge>;
-    }
+    const statusConfig = {
+      'New': { color: 'blue' as const, label: 'New' },
+      'Pending': { color: 'orange' as const, label: 'Pending' },
+      'Approved': { color: 'green' as const, label: 'Approved' },
+      'Rejected': { color: 'red' as const, label: 'Rejected' },
+      'Completed': { color: 'gray' as const, label: 'Completed' },
+      'Cancelled': { color: 'gray' as const, label: 'Cancelled' }
+    };
+
+    const config = statusConfig[status] || { color: 'gray' as const, label: status };
+    
+    return (
+      <Badge color={config.color} variant="soft">
+        {config.label}
+      </Badge>
+    );
   };
-  
+
+  if (stockRequests.length === 0) {
+    return (
+      <Flex direction="column" align="center" justify="center" gap="3" className="py-8">
+        <FileText className="h-8 w-8 text-gray-400" />
+        <Text size="3" color="gray">No stock requests found</Text>
+        <Text size="2" color="gray">Stock requests will appear here once created.</Text>
+      </Flex>
+    );
+  }
+
   return (
-    <>
-      <Table.Root variant="surface">
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Request Number"
-                sortKey="requestNumber"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Date"
-                sortKey="date"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Origin"
-                sortKey="origin"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Destination"
-                sortKey="destination"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>
-              <SortableHeader
-                label="Status"
-                sortKey="status"
-                currentSort={sortConfig}
-                onSort={handleSort}
-              />
-            </Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-        
-        <Table.Body>
-          {sortedRequests.length === 0 ? (
-            <Table.Row>
-              <Table.Cell colSpan={6}>
-                <Text align="center" className="py-4">No stock requests found</Text>
-              </Table.Cell>
-            </Table.Row>
-          ) : (
-            sortedRequests.map(request => (
-              <Table.Row key={request.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={() => onView(request)}>
-                <Table.Cell>{request.requestNumber}</Table.Cell>
-                <Table.Cell>{formatDate(request.date)}</Table.Cell>
-                <Table.Cell>{getBranchName(request.originId)}</Table.Cell>
-                <Table.Cell>{getBranchName(request.destinationId)}</Table.Cell>
-                <Table.Cell>{getStatusBadge(request.status)}</Table.Cell>
-                <Table.Cell>
-                  <Flex gap="3" justify="center">
+    <Table.Root variant="surface">
+      <Table.Header>
+        <Table.Row>
+          <Table.ColumnHeaderCell>
+            <SortableHeader
+              label="Request Number"
+              sortKey="requestNumber"
+              currentSort={sortConfig}
+              onSort={handleSort}
+            />
+          </Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>
+            <SortableHeader
+              label="Date"
+              sortKey="date"
+              currentSort={sortConfig}
+              onSort={handleSort}
+            />
+          </Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>
+            <SortableHeader
+              label="Origin"
+              sortKey="originId"
+              currentSort={sortConfig}
+              onSort={handleSort}
+            />
+          </Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>
+            <SortableHeader
+              label="Destination"
+              sortKey="destinationId"
+              currentSort={sortConfig}
+              onSort={handleSort}
+            />
+          </Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>
+            <SortableHeader
+              label="Status"
+              sortKey="status"
+              currentSort={sortConfig}
+              onSort={handleSort}
+            />
+          </Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Items</Table.ColumnHeaderCell>
+          {!readOnly && <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>}
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {sortedRequests.map((request) => (
+          <Table.Row key={request.id} className="cursor-pointer hover:bg-gray-50">
+            <Table.Cell>
+              <Text weight="medium">{request.requestNumber}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{formatDate(request.date)}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{getBranchName(request.originId)}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{getBranchName(request.destinationId)}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              {getStatusBadge(request.status)}
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{request.items.length} items</Text>
+            </Table.Cell>
+            {!readOnly && (
+              <Table.Cell>
+                <Flex gap="1">
+                  <IconButton 
+                    variant="soft" 
+                    color="blue" 
+                    size="1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onView?.(request);
+                    }}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </IconButton>
+                  <IconButton 
+                    variant="soft" 
+                    color="green" 
+                    size="1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit?.(request);
+                    }}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </IconButton>
+                  {request.id && (
                     <IconButton 
-                      size="1" 
-                      variant="ghost"
-                      color="gray"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        onView(request); 
-                      }}
-                    >
-                      <FileText size={14} />
-                    </IconButton>
-                    <IconButton
-                      size="1"
-                      variant="ghost"
-                      color="gray"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(request);
-                      }}
-                      disabled={request.status !== 'New'}
-                      title={request.status !== 'New' ? "Cannot edit non-'New' requests" : "Edit Request"}
-                    >
-                      <Edit size={14} />
-                    </IconButton>
-                    <IconButton 
-                      size="1" 
-                      variant="ghost" 
+                      variant="soft" 
                       color="red" 
+                      size="1"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteClick(request);
+                        onDelete?.(request.id!);
                       }}
-                      disabled={request.status !== 'New'}
-                      title={request.status !== 'New' ? "Cannot delete non-'New' requests" : "Delete Request"}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 className="h-4 w-4" />
                     </IconButton>
-                  </Flex>
-                </Table.Cell>
-              </Table.Row>
-            ))
-          )}
-        </Table.Body>
-      </Table.Root>
-      
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={confirmDelete}
-        title="Confirm Delete"
-        description={`Are you sure you want to delete stock request #${requestToDelete?.requestNumber}? This action cannot be undone.`}
-        confirmText="Delete"
-        color="red"
-      />
-    </>
+                  )}
+                </Flex>
+              </Table.Cell>
+            )}
+          </Table.Row>
+        ))}
+      </Table.Body>
+    </Table.Root>
   );
 };
 

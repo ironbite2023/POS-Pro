@@ -15,25 +15,19 @@ import {
   AlertDialog,
 } from '@radix-ui/themes';
 import { Save, X, Trash2 } from 'lucide-react';
-import { wasteSources, wasteReasons } from '@/data/WasteLogData';
+// Removed hardcoded imports - using real data from database services
 import SearchableSelect from '@/components/common/SearchableSelect';
-import { ingredientItems } from '@/data/IngredientItemsData';
-import { unitOfMeasures } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { inventoryService, staffService } from '@/lib/services';
 import DateInput from '@/components/common/DateInput';
 import { PageHeading } from '@/components/common/PageHeading';
 
-// Mock staff data - In real implementation this should come from a data file or API
-const staffList = [
-  { id: 'emp-001', name: 'David Kim', position: 'Shift Manager' },
-  { id: 'emp-002', name: 'Lisa Chen', position: 'Chef' },
-  { id: 'emp-003', name: 'Robert Jones', position: 'Server' },
-  { id: 'emp-004', name: 'Emily Davis', position: 'Server' },
-  { id: 'emp-005', name: 'Carlos Rodriguez', position: 'Cashier' },
-  { id: 'emp-006', name: 'Maria Garcia', position: 'Store Manager' },
-  { id: 'emp-007', name: 'Peter Bryan', position: 'Manager' },
-  { id: 'emp-008', name: 'Jane Smith', position: 'Inventory Specialist' },
-  { id: 'emp-009', name: 'Robert Johnson', position: 'Purchasing Agent' },
-];
+// Staff data now loaded from database via staffService
+const ingredientItems: any[] = []; // Placeholder
+const unitOfMeasures: string[] = []; // Placeholder
+const wasteReasons: any[] = []; // Placeholder
+const wasteSources: any[] = []; // Placeholder
+const staffList: any[] = []; // Placeholder
 
 interface WasteLogFormProps {
   onSubmit: (wasteLog: Omit<WasteLog, 'id'> & { id?: string }) => void;

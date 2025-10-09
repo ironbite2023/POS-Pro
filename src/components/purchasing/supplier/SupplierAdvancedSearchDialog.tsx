@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, Flex, Box, Button, TextField, Text, Select, Checkbox, Separator, Switch, Grid, Heading } from '@radix-ui/themes';
 import { Search, X } from 'lucide-react';
-import { ingredientItemCategories } from '@/data/CommonData';
+// Removed hardcoded import - using real inventory categories from database
+import { inventoryService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import DateRangeInput from "@/components/common/DateRangeInput";
 import { Range } from 'react-date-range';
 
@@ -49,6 +51,17 @@ export default function SupplierAdvancedSearchDialog({
   onSearch
 }: SupplierAdvancedSearchDialogProps) {
   const [filters, setFilters] = useState<AdvancedSearchFilters>(initialFilters);
+  
+  // Supplier categories - TODO: Move to database or make configurable
+  const supplierCategories = [
+    'Food & Beverage',
+    'Equipment',
+    'Packaging',
+    'Cleaning Supplies',
+    'Utilities',
+    'Professional Services',
+    'Other'
+  ];
 
   const handleInputChange = (field: keyof AdvancedSearchFilters) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters({ ...filters, [field]: e.target.value });
@@ -129,7 +142,7 @@ export default function SupplierAdvancedSearchDialog({
                     <Select.Trigger placeholder="Select category" />
                     <Select.Content>
                       <Select.Item value="all">All Categories</Select.Item>
-                      {ingredientItemCategories.map(category => (
+                      {supplierCategories.map(category => (
                         <Select.Item key={category} value={category}>{category}</Select.Item>
                       ))}
                     </Select.Content>

@@ -42,3 +42,6 @@ next-env.d.ts
 .cursor/rules/frontend-guidelines.mdc
 .cursor/rules/implementation-plan.mdc
 .windsurfrules
+
+# Exclude duplicate project folders
+eatlypos-v1.1.0/

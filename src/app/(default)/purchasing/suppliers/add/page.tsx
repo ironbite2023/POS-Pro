@@ -1,8 +1,10 @@
 'use client';
 
 import SupplierDetails from '@/components/purchasing/supplier/SupplierDetails';
-import { Supplier } from '@/types/inventory';
 import { useRouter } from 'next/navigation';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import { toast } from 'sonner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 

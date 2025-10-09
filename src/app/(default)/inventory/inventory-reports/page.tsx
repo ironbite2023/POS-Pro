@@ -13,7 +13,8 @@ import {
 import DateRangeInput from '@/components/common/DateRangeInput';
 import { Range } from 'react-date-range';
 import { useFilterBranch, FilterBranchProvider } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded organization import - using real organization from context
 
 // Import report components
 import InventoryValueReport from '@/components/inventory/reports/InventoryValueReport';
@@ -33,8 +34,6 @@ const reportTypes = [
   { id: 'usage', name: 'Ingredient Usage Report' },
   { id: 'cost', name: 'Inventory Cost Analysis' },
 ];
-
-const branches = organization.filter(org => org.id !== 'hq');
 
 // Mock ingredient categories
 const ingredientCategories = [
@@ -87,45 +86,11 @@ const mockInventoryValueData = ingredientCategories.map(category => {
   };
 });
 
-// Generate mock stock movement data
-const mockStockMovementData = branches.map(branch => {
-  // Generate random inbound and outbound values
-  const inbound = Math.floor(Math.random() * 500) + 200;
-  const outbound = Math.floor(Math.random() * 400) + 150;
-  
-  // Calculate net change
-  const netChange = inbound - outbound;
-  
-  // Generate random growth rate (-10% to 20%)
-  const movementGrowth = parseFloat((Math.random() * 30 - 10).toFixed(1));
-  
-  // Generate top moving category
-  const topCategory = ingredientCategories[Math.floor(Math.random() * ingredientCategories.length)].name;
-  
-  return {
-    id: branch.id,
-    name: branch.name,
-    inbound,
-    outbound,
-    netChange,
-    growth: movementGrowth,
-    topCategory
-  };
-});
+// Mock stock movement data - TODO: Replace with real data
+const mockStockMovementData: any[] = [];
 
-// Generate low stock items data
-const mockLowStockData = mockIngredientItems
-  .filter(item => item.stockQuantity < (item.reorderLevel * 1.5))
-  .map(item => ({
-    ...item,
-    categoryName: ingredientCategories.find(c => c.id === item.category)?.name || '',
-    daysUntilStockout: Math.floor(Math.random() * 14) + 1,
-    branch: branches[Math.floor(Math.random() * branches.length)].name,
-    branchId: branches[Math.floor(Math.random() * branches.length)].id,
-    lastOrderDate: new Date(Date.now() - (Math.random() * 30 * 24 * 60 * 60 * 1000)), // Random date in last 30 days
-    suggestedOrderQuantity: Math.ceil(item.reorderLevel * 1.5),
-    value: parseFloat((item.price * item.stockQuantity).toFixed(2))
-  }));
+// Mock low stock items data - TODO: Replace with real data
+const mockLowStockData: any[] = [];
 
 // Generate ingredient usage data
 const mockIngredientUsageData = mockIngredientItems.map(item => {
@@ -185,6 +150,8 @@ const mockCostAnalysisData = ingredientCategories.map(category => {
 });
 
 function InventoryReportsContent() {
+  const { branches: orgBranches } = useOrganization();
+  const branches = orgBranches.filter(b => b.id !== 'hq');
   const [isClient, setIsClient] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState('value'); // Default to inventory value
   const [dateRange, setDateRange] = useState<Range>({

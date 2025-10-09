@@ -2,8 +2,20 @@
 
 import React from 'react';
 import { Box, Checkbox, Flex, Table, Text, Tooltip } from '@radix-ui/themes';
-import { Permission } from '@/data/RolesPermissionsData';
+// Removed hardcoded import - using real permissions from database roles
+import type { Database } from '@/lib/supabase/database.types';
+
+type Role = Database['public']['Tables']['roles']['Row'];
 import { HelpCircle } from 'lucide-react';
+
+interface Permission {
+  id: string;
+  module: string;
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
 
 interface PermissionsMatrixProps {
   permissions: Permission[];

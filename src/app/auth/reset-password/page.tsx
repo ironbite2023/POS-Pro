@@ -8,6 +8,7 @@ import { Check, AlertCircle, Eye, EyeOff, Lock } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { supabase } from '@/lib/supabase/client';
 
 const LogoHeading = () => {
   const { theme } = useTheme();
@@ -64,21 +65,25 @@ function ResetPasswordContent() {
     setIsLoading(true);
     
     try {
-      // This would be where you'd call your API to reset the password
-      // For example: await resetPassword(token, password);
+      // Update password using Supabase auth
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: password
+      });
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (updateError) {
+        throw updateError;
+      }
       
       setSuccess(true);
       setIsLoading(false);
       
       // Redirect to login page after 3 seconds
       setTimeout(() => {
-        router.push("/auth/login");
+        router.push("/auth/login?message=Password updated successfully! Please login with your new password.");
       }, 3000);
-    } catch (err) {
-      setError(`Failed to reset password. Please try again. ${err}`);
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message || 'Failed to reset password. Please try again.');
       setIsLoading(false);
     }
   };

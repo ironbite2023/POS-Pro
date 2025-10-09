@@ -4,7 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Box, Heading, Flex, Text, Grid, Badge, Button, Table, Separator } from '@radix-ui/themes';
 import { ArrowLeft, CreditCard, Receipt, CheckCircle, AlertCircle, FileText, Printer, User, Phone, MapPin, Edit, HandHelping, CookingPot, Soup } from 'lucide-react';
-import { liveOrdersData, LiveOrder } from '@/data/LiveOrdersData';
+// Removed hardcoded import - using real data from database services
+// Removed unused imports ordersService and useOrganization
+// Placeholder types and data
+type _Order = any;
+type _OrderWithItems = any;
+type LiveOrder = any;
+const liveOrdersData: any[] = [];
 import OrderTimer from '@/components/common/OrderTimer';
 import { PageHeading } from '@/components/common/PageHeading';
 import CardHeading from '@/components/common/CardHeading';

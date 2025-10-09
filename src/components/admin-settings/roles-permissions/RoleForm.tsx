@@ -4,82 +4,162 @@ import React, { useState, useEffect } from 'react';
 import { Box, Button, Flex, Tabs, Text, TextField, TextArea, Select, Card, AlertDialog } from '@radix-ui/themes';
 import { Save, Shield, Users, X, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Role, Permission, moduleNames, mockRoles } from '@/data/RolesPermissionsData';
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { supabase } from '@/lib/supabase/client';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Role = Database['public']['Tables']['roles']['Row'];
 import { PageHeading } from '@/components/common/PageHeading';
 import PermissionsMatrix from './PermissionsMatrix';
+
+interface Permission {
+  id: string;
+  module: string;
+  view: boolean;
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
 
 interface RoleFormProps {
   roleId?: string;
   onDelete?: (id: string) => void;
 }
 
+// Module names for default permissions
+const moduleNames = [
+  'Dashboard',
+  'POS',
+  'Inventory',
+  'Menu Management',
+  'Purchasing',
+  'Sales',
+  'Delivery',
+  'Loyalty Program',
+  'Waste Management',
+  'Admin Settings'
+];
+
 export default function RoleForm({ roleId, onDelete }: RoleFormProps) {
   const [activeTab, setActiveTab] = useState('details');
   const [role, setRole] = useState<Role | null>(null);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const router = useRouter();
+  const { currentOrganization } = useOrganization();
   const isNewRole = !roleId;
   
   // Load role data
   useEffect(() => {
-    // For new role, create a default template
-    if (isNewRole) {
-      setRole({
-        id: 'new',
-        name: '',
-        description: '',
-        accessScope: 'Branch',
-        assignedUsers: 0,
-        permissions: moduleNames.map(module => ({
+    const loadRole = async () => {
+      // For new role, create a default template
+      if (isNewRole) {
+        setRole({
+          id: crypto.randomUUID(),
+          organization_id: currentOrganization?.id || '',
+          name: '',
+          description: '',
+          permissions: {},
+          is_system_role: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        
+        // Initialize default permissions
+        setPermissions(moduleNames.map(module => ({
           id: `${module.toLowerCase().replace(/\s/g, '-')}-new`,
           module,
           view: false,
           create: false,
           edit: false,
           delete: false
-        }))
-      });
-      return;
-    }
+        })));
+        return;
+      }
+      
+      // For existing role, load from database
+      const { data, error } = await supabase
+        .from('roles')
+        .select('*')
+        .eq('id', roleId)
+        .single();
+      
+      if (error || !data) {
+        console.error('Error loading role:', error);
+        router.push('/admin-settings/roles-permissions');
+        return;
+      }
+      
+      setRole(data);
+      
+      // Parse permissions from JSON
+      if (typeof data.permissions === 'object' && data.permissions !== null) {
+        const perms = data.permissions as any;
+        if (Array.isArray(perms)) {
+          setPermissions(perms);
+        }
+      } else {
+        // Initialize with default permissions if none exist
+        setPermissions(moduleNames.map(module => ({
+          id: `${module.toLowerCase().replace(/\s/g, '-')}`,
+          module,
+          view: false,
+          create: false,
+          edit: false,
+          delete: false
+        })));
+      }
+    };
     
-    // For existing role, load from mock data
-    const foundRole = mockRoles.find(r => r.id === roleId);
-    if (foundRole) {
-      setRole(foundRole);
-    } else {
-      // Redirect if role not found
-      router.push('/admin-settings/roles-permissions');
-    }
-  }, [roleId, router, isNewRole]);
+    loadRole();
+  }, [roleId, router, isNewRole, currentOrganization?.id]);
   
   if (!role) {
     return <Box>Loading role data...</Box>;
   }
   
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!role) return;
+    
     setIsLoading(true);
     
-    // In a real app, this would be an API call to update or create the role
-    console.log('Saving role:', role);
-    
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const roleData = {
+        ...role,
+        permissions: permissions as any,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (isNewRole) {
+        const { error } = await supabase
+          .from('roles')
+          .insert(roleData);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('roles')
+          .update(roleData)
+          .eq('id', role.id);
+        
+        if (error) throw error;
+      }
+      
       router.push('/admin-settings/roles-permissions');
-    }, 500);
+    } catch (error) {
+      console.error('Error saving role:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Handle permission updates
   const handlePermissionsUpdate = (updatedPermissions: Permission[]) => {
-    setRole(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        permissions: updatedPermissions
-      };
-    });
+    setPermissions(updatedPermissions);
   };
   
   // Handle cancel and return to roles list
@@ -161,27 +241,6 @@ export default function RoleForm({ roleId, onDelete }: RoleFormProps) {
                   />
                 </Flex>
                 
-                <Flex direction="column" gap="1">
-                  <Text as="label" size="2" weight="medium">
-                    Access Scope
-                  </Text>
-                  <Select.Root 
-                    value={role.accessScope} 
-                    onValueChange={(value) => handleFieldChange('accessScope', value)}
-                  >
-                    <Select.Trigger />
-                    <Select.Content>
-                      <Select.Item value="HQ">HQ - Headquarters (All Access)</Select.Item>
-                      <Select.Item value="Region">Region - Multiple Branches</Select.Item>
-                      <Select.Item value="Branch">Branch - Specific Location</Select.Item>
-                    </Select.Content>
-                  </Select.Root>
-                  <Text as="p" size="1" color="gray" mt="1">
-                    {role.accessScope === 'HQ' && 'Users with this role can access all branches and headquarters functions.'}
-                    {role.accessScope === 'Region' && 'Users with this role can access multiple branches within their assigned region.'}
-                    {role.accessScope === 'Branch' && 'Users with this role can only access their specific assigned branch.'}
-                  </Text>
-                </Flex>
               </Flex>
             </Card>
           </Tabs.Content>
@@ -192,7 +251,7 @@ export default function RoleForm({ roleId, onDelete }: RoleFormProps) {
                 Select what users with this role can do in each module of the system.
               </Text>
               <PermissionsMatrix 
-                permissions={role.permissions}
+                permissions={permissions}
                 onChange={handlePermissionsUpdate}
               />
             </Box>

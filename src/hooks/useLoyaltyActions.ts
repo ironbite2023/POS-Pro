@@ -35,15 +35,16 @@ export const useLoyaltyActions = (): UseLoyaltyActionsReturn => {
       // Generate a unique member number
       const memberNumber = `MEM${Date.now()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-      await loyaltyService.createMember({
+      // Prepare member data for service (service handles organization_id and member_number)
+      const cleanMemberData = {
         ...memberData,
-        organization_id: currentOrganization.id,
-        member_number: memberNumber,
         current_points: 0,
         lifetime_points: 0,
         status: 'active',
         joined_at: new Date().toISOString(),
-      });
+      };
+      
+      await loyaltyService.createMember(currentOrganization.id, cleanMemberData);
 
       toast.success('Member enrolled successfully!');
     } catch (err) {
@@ -73,7 +74,6 @@ export const useLoyaltyActions = (): UseLoyaltyActionsReturn => {
 
       await loyaltyService.addPoints(
         memberId,
-        currentOrganization.id,
         points,
         description || 'Points earned',
         orderId,
@@ -81,8 +81,8 @@ export const useLoyaltyActions = (): UseLoyaltyActionsReturn => {
         userProfile?.id
       );
 
-      // Update tier after earning points
-      await loyaltyService.updateMemberTier(memberId);
+      // TODO: Implement automatic tier update functionality in loyaltyService
+      // await loyaltyService.updateMemberTier(memberId);
 
       toast.success(`${points} points added!`);
     } catch (err) {
@@ -111,7 +111,6 @@ export const useLoyaltyActions = (): UseLoyaltyActionsReturn => {
 
       await loyaltyService.redeemPoints(
         memberId,
-        currentOrganization.id,
         points,
         description || 'Points redeemed',
         currentBranch?.id,
@@ -132,8 +131,9 @@ export const useLoyaltyActions = (): UseLoyaltyActionsReturn => {
 
   const updateTier = async (memberId: string) => {
     try {
-      await loyaltyService.updateMemberTier(memberId);
-      toast.success('Member tier updated!');
+      // TODO: Implement automatic tier promotion in loyaltyService.updateMemberTier
+      console.log('Tier update functionality not yet implemented for member:', memberId);
+      toast.info('Tier update functionality coming soon!');
     } catch (err) {
       console.error('Error updating tier:', err);
       setError(err as Error);

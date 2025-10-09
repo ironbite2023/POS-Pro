@@ -8,6 +8,8 @@ const nextConfig = {
       },
     ],
   },
+  // Explicitly set the output file tracing root to avoid warnings
+  outputFileTracingRoot: process.cwd(),
 };
 
 export default nextConfig;

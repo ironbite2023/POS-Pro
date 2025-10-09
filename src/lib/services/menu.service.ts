@@ -1,29 +1,44 @@
-import { supabase } from '../supabase/client';
-import type { Database } from '../supabase/database.types';
+import { supabase } from '@/lib/supabase/client';
+import { Database } from '@/lib/supabase/database.types';
 
-type MenuItem = Database['public']['Tables']['menu_items']['Row'];
-type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 type MenuCategory = Database['public']['Tables']['menu_categories']['Row'];
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
 type MenuCategoryInsert = Database['public']['Tables']['menu_categories']['Insert'];
-type RecipeIngredient = Database['public']['Tables']['recipe_ingredients']['Row'];
-type RecipeIngredientInsert = Database['public']['Tables']['recipe_ingredients']['Insert'];
+type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 
-export interface MenuItemWithCategory extends MenuItem {
-  category?: MenuCategory | null;
+// Enhanced types for branch availability using proper database types
+type MenuItemBranchAvailabilityRow = Database['public']['Tables']['menu_item_branch_availability']['Row'];
+type MenuItemBranchAvailabilityInsert = Database['public']['Tables']['menu_item_branch_availability']['Insert'];
+
+export interface MenuItemBranchAvailability extends MenuItemBranchAvailabilityRow {}
+
+export interface BranchAvailabilityUpdate {
+  is_available?: boolean;
+  price_override?: number | null;
+  stock_quantity?: number | null;
+  daily_limit?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  available_days?: number[];
+  notes?: string;
+  metadata?: Record<string, any>;
 }
 
-export interface MenuItemWithRecipe extends MenuItem {
-  recipe_ingredients?: Array<RecipeIngredient & {
-    inventory_item?: {
-      name: string;
-      sku: string;
-    };
-  }>;
+export interface MenuItemWithBranchData extends MenuItem {
+  category?: MenuCategory;
+  branch_availability?: Partial<MenuItemBranchAvailability>;
+  effective_price?: number;
+  is_available_at_branch?: boolean;
+  is_currently_available?: boolean;
+}
+
+export interface MenuItemWithCategory extends MenuItem {
+  category?: MenuCategory;
 }
 
 export const menuService = {
-  // ========== Menu Categories ==========
-  
   /**
    * Get all menu categories for an organization
    */
@@ -33,62 +48,368 @@ export const menuService = {
       .select('*')
       .eq('organization_id', organizationId)
       .eq('is_active', true)
-      .order('sort_order');
-
+      .order('sort_order', { ascending: true });
+    
     if (error) throw error;
     return data || [];
   },
 
   /**
-   * Create a new menu category
+   * Get menu items for an organization, optionally filtered by category
    */
-  createCategory: async (category: MenuCategoryInsert): Promise<MenuCategory> => {
-    const { data, error } = await supabase
-      .from('menu_categories')
-      .insert(category)
-      .select()
+  getMenuItems: async (organizationId: string, categoryId?: string): Promise<MenuItemWithCategory[]> => {
+    let query = supabase
+      .from('menu_items')
+      .select(`
+        *,
+        category:menu_categories(*)
+      `)
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+    
+    if (categoryId) {
+      query = query.eq('category_id', categoryId);
+    }
+    
+    const { data, error } = await query.order('name');
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Get menu items with branch-specific availability and pricing
+   * Restored with proper database types
+   */
+  getMenuItemsForBranch: async (organizationId: string, branchId: string): Promise<MenuItemWithBranchData[]> => {
+    // Get menu items first
+    const menuItems = await menuService.getMenuItems(organizationId);
+    
+    // Get branch availability data
+    const { data: branchAvailability, error: branchError } = await supabase
+      .from('menu_item_branch_availability')
+      .select('*')
+      .eq('branch_id', branchId);
+    
+    if (branchError) throw branchError;
+
+    // Combine the data
+    return (menuItems || []).map(item => {
+      const availability = branchAvailability?.find(ba => ba.menu_item_id === item.id);
+      
+      return {
+        ...item,
+        branch_availability: availability || undefined,
+        effective_price: availability?.price_override || item.base_price,
+        is_available_at_branch: availability?.is_available ?? true,
+        is_currently_available: availability?.is_available ?? true
+      };
+    });
+  },
+
+  /**
+   * Get comprehensive branch menu data using materialized view
+   * Restored with proper database types
+   */
+  getBranchMenuOverview: async (organizationId: string, branchId?: string): Promise<any[]> => {
+    let query = supabase
+      .from('menu_items_with_branch_availability')
+      .select('*')
+      .eq('organization_id', organizationId);
+
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data, error } = await query.order('item_name');
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Update branch-specific menu item availability
+   * Restored with proper database types
+   */
+  updateBranchAvailability: async (
+    menuItemId: string,
+    branchId: string,
+    updates: BranchAvailabilityUpdate
+  ): Promise<MenuItemBranchAvailability> => {
+    // Get organization ID from menu item
+    const { data: menuItem } = await supabase
+      .from('menu_items')
+      .select('organization_id')
+      .eq('id', menuItemId)
       .single();
 
+    if (!menuItem) {
+      throw new Error('Menu item not found');
+    }
+
+    const { data, error } = await supabase
+      .from('menu_item_branch_availability')
+      .upsert({
+        menu_item_id: menuItemId,
+        branch_id: branchId,
+        organization_id: menuItem.organization_id,
+        ...updates,
+        updated_at: new Date().toISOString()
+      } as MenuItemBranchAvailabilityInsert, {
+        onConflict: 'menu_item_id,branch_id'
+      })
+      .select()
+      .single();
+    
     if (error) throw error;
     return data;
   },
 
   /**
-   * Update menu category
+   * Batch update multiple items' branch availability
+   * Restored with proper database types
    */
-  updateCategory: async (
-    categoryId: string,
-    updates: Partial<Omit<MenuCategory, 'id' | 'created_at' | 'organization_id'>>
-  ): Promise<MenuCategory> => {
+  batchUpdateBranchAvailability: async (
+    branchId: string,
+    updates: Array<{
+      menuItemId: string;
+      updates: BranchAvailabilityUpdate;
+    }>
+  ): Promise<MenuItemBranchAvailability[]> => {
+    const results: MenuItemBranchAvailability[] = [];
+    
+    // Process in chunks to avoid overwhelming the database
+    const chunkSize = 10;
+    for (let i = 0; i < updates.length; i += chunkSize) {
+      const chunk = updates.slice(i, i + chunkSize);
+      const chunkPromises = chunk.map(({ menuItemId, updates: itemUpdates }) =>
+        menuService.updateBranchAvailability(menuItemId, branchId, itemUpdates)
+      );
+      
+      const chunkResults = await Promise.all(chunkPromises);
+      results.push(...chunkResults);
+    }
+    
+    return results;
+  },
+
+  /**
+   * Delete branch-specific availability (revert to default)
+   * Restored with proper database types
+   */
+  deleteBranchAvailability: async (menuItemId: string, branchId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('menu_item_branch_availability')
+      .delete()
+      .eq('menu_item_id', menuItemId)
+      .eq('branch_id', branchId);
+    
+    if (error) throw error;
+  },
+
+  /**
+   * Get branch availability settings for a specific menu item
+   * Restored with proper database types
+   */
+  getBranchAvailability: async (
+    menuItemId: string, 
+    branchId: string
+  ): Promise<MenuItemBranchAvailability | null> => {
+    const { data, error } = await supabase
+      .from('menu_item_branch_availability')
+      .select('*')
+      .eq('menu_item_id', menuItemId)
+      .eq('branch_id', branchId)
+      .maybeSingle();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Check if menu item is currently available at branch
+   * Restored with proper database function integration
+   */
+  checkItemAvailabilityAtBranch: async (
+    menuItemId: string,
+    branchId: string,
+    checkDate?: string,
+    checkTime?: string
+  ): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('is_menu_item_available_at_branch', {
+      p_menu_item_id: menuItemId,
+      p_branch_id: branchId,
+      p_check_date: checkDate || new Date().toISOString().split('T')[0],
+      p_check_time: checkTime || new Date().toTimeString().split(' ')[0]
+    });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get effective price for menu item at specific branch
+   * Restored with proper database function integration
+   */
+  getItemPriceAtBranch: async (
+    menuItemId: string,
+    branchId: string
+  ): Promise<number> => {
+    const { data, error } = await supabase.rpc('get_menu_item_price_at_branch', {
+      p_menu_item_id: menuItemId,
+      p_branch_id: branchId
+    });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Refresh materialized view for updated branch availability data
+   * Restored with proper database function integration
+   */
+  refreshBranchAvailabilityView: async (): Promise<void> => {
+    const { error } = await supabase.rpc('refresh_menu_branch_availability_view');
+    if (error) throw error;
+  },
+
+  /**
+   * Get branch-specific menu performance analytics
+   * Enhanced with proper database types
+   */
+  getBranchMenuAnalytics: async (
+    organizationId: string,
+    branchId: string,
+    startDate?: string,
+    endDate?: string
+  ) => {
+    const menuItems = await menuService.getMenuItemsForBranch(organizationId, branchId);
+    
+    return {
+      totalItems: menuItems.length,
+      availableItems: menuItems.filter(item => item.is_available_at_branch).length,
+      itemsWithPriceOverride: menuItems.filter(item => item.branch_availability?.price_override).length,
+      stockLimitedItems: menuItems.filter(item => item.branch_availability?.stock_quantity).length,
+      menuItems: menuItems
+    };
+  },
+
+  /**
+   * Get a single menu item by ID
+   */
+  getMenuItemById: async (itemId: string): Promise<MenuItemWithCategory | null> => {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select(`
+        *,
+        category:menu_categories(*)
+      `)
+      .eq('id', itemId)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Create a new menu category
+   */
+  createCategory: async (organizationId: string, category: Omit<MenuCategoryInsert, 'organization_id'>): Promise<MenuCategory> => {
     const { data, error } = await supabase
       .from('menu_categories')
-      .update(updates)
+      .insert({ 
+        ...category, 
+        organization_id: organizationId 
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Create a new menu item
+   */
+  createMenuItem: async (organizationId: string, item: Omit<MenuItemInsert, 'organization_id'>): Promise<MenuItem> => {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .insert({ 
+        ...item, 
+        organization_id: organizationId 
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Update a menu category
+   */
+  updateCategory: async (categoryId: string, updates: Partial<MenuCategory>): Promise<MenuCategory> => {
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', categoryId)
       .select()
       .single();
-
+    
     if (error) throw error;
     return data;
   },
 
   /**
-   * Delete menu category (soft delete by setting is_active to false)
+   * Update a menu item
+   */
+  updateMenuItem: async (itemId: string, updates: Partial<MenuItem>): Promise<MenuItem> => {
+    const { data, error } = await supabase
+      .from('menu_items')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', itemId)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Delete a menu category (soft delete - set inactive)
    */
   deleteCategory: async (categoryId: string): Promise<void> => {
     const { error } = await supabase
       .from('menu_categories')
-      .update({ is_active: false })
+      .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', categoryId);
-
+    
     if (error) throw error;
   },
 
-  // ========== Menu Items ==========
+  /**
+   * Delete a menu item (soft delete - set inactive)
+   */
+  deleteMenuItem: async (itemId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('menu_items')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('id', itemId);
+    
+    if (error) throw error;
+  },
 
   /**
-   * Get all menu items for an organization
+   * Get menu items with branch-specific pricing (legacy method)
+   * @deprecated Use getMenuItemsForBranch instead
    */
-  getMenuItems: async (organizationId: string): Promise<MenuItemWithCategory[]> => {
+  getMenuItemsWithBranchPricing: async (organizationId: string, branchId: string): Promise<MenuItemWithCategory[]> => {
+    console.warn('getMenuItemsWithBranchPricing is deprecated. Use getMenuItemsForBranch instead.');
+    return menuService.getMenuItemsForBranch(organizationId, branchId);
+  },
+
+  /**
+   * Search menu items by name or description
+   */
+  searchMenuItems: async (organizationId: string, searchTerm: string): Promise<MenuItemWithCategory[]> => {
     const { data, error } = await supabase
       .from('menu_items')
       .select(`
@@ -97,205 +418,31 @@ export const menuService = {
       `)
       .eq('organization_id', organizationId)
       .eq('is_active', true)
+      .or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
       .order('name');
-
+    
     if (error) throw error;
     return data || [];
   },
 
   /**
-   * Get menu items by category
+   * Search menu items at specific branch with availability filtering
    */
-  getMenuItemsByCategory: async (
-    organizationId: string,
-    categoryId: string
-  ): Promise<MenuItem[]> => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('category_id', categoryId)
-      .eq('is_active', true)
-      .order('name');
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  /**
-   * Get menu item by ID with recipe
-   */
-  getMenuItemById: async (menuItemId: string): Promise<MenuItemWithRecipe | null> => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select(`
-        *,
-        recipe_ingredients(
-          *,
-          inventory_item:inventory_items(name, sku)
-        )
-      `)
-      .eq('id', menuItemId)
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Create a new menu item
-   */
-  createMenuItem: async (menuItem: MenuItemInsert): Promise<MenuItem> => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .insert(menuItem)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Update menu item
-   */
-  updateMenuItem: async (
-    menuItemId: string,
-    updates: Partial<Omit<MenuItem, 'id' | 'created_at' | 'organization_id'>>
-  ): Promise<MenuItem> => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .update(updates)
-      .eq('id', menuItemId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Delete menu item (soft delete by setting is_active to false)
-   */
-  deleteMenuItem: async (menuItemId: string): Promise<void> => {
-    const { error } = await supabase
-      .from('menu_items')
-      .update({ is_active: false })
-      .eq('id', menuItemId);
-
-    if (error) throw error;
-  },
-
-  // ========== Recipe Management ==========
-
-  /**
-   * Get recipe ingredients for a menu item
-   */
-  getRecipeIngredients: async (menuItemId: string): Promise<RecipeIngredient[]> => {
-    const { data, error } = await supabase
-      .from('recipe_ingredients')
-      .select('*')
-      .eq('menu_item_id', menuItemId);
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  /**
-   * Add ingredient to recipe
-   */
-  addRecipeIngredient: async (
-    ingredient: RecipeIngredientInsert
-  ): Promise<RecipeIngredient> => {
-    const { data, error } = await supabase
-      .from('recipe_ingredients')
-      .insert(ingredient)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Update recipe ingredient
-   */
-  updateRecipeIngredient: async (
-    ingredientId: string,
-    updates: Partial<Omit<RecipeIngredient, 'id' | 'created_at' | 'organization_id'>>
-  ): Promise<RecipeIngredient> => {
-    const { data, error } = await supabase
-      .from('recipe_ingredients')
-      .update(updates)
-      .eq('id', ingredientId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
-
-  /**
-   * Remove ingredient from recipe
-   */
-  removeRecipeIngredient: async (ingredientId: string): Promise<void> => {
-    const { error } = await supabase
-      .from('recipe_ingredients')
-      .delete()
-      .eq('id', ingredientId);
-
-    if (error) throw error;
-  },
-
-  // ========== Branch-Specific Overrides ==========
-
-  /**
-   * Get menu items for a specific branch (with overrides)
-   */
-  getMenuItemsForBranch: async (
-    organizationId: string,
-    branchId: string
-  ): Promise<MenuItem[]> => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select(`
-        *,
-        overrides:menu_item_branch_overrides!left(
-          is_available,
-          price_override
-        )
-      `)
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .or(`branch_id.eq.${branchId}`, { foreignTable: 'menu_item_branch_overrides' });
-
-    if (error) throw error;
-    return data || [];
-  },
-
-  /**
-   * Set branch-specific menu item override
-   */
-  setBranchOverride: async (
-    menuItemId: string,
-    branchId: string,
-    organizationId: string,
-    isAvailable?: boolean,
-    priceOverride?: number
-  ) => {
-    const { data, error } = await supabase
-      .from('menu_item_branch_overrides')
-      .upsert({
-        menu_item_id: menuItemId,
-        branch_id: branchId,
-        organization_id: organizationId,
-        is_available: isAvailable ?? null,
-        price_override: priceOverride ?? null,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
-  },
+  searchMenuItemsAtBranch: async (
+    organizationId: string, 
+    branchId: string, 
+    searchTerm: string,
+    onlyAvailable: boolean = false
+  ): Promise<MenuItemWithBranchData[]> => {
+    const items = await menuService.getMenuItemsForBranch(organizationId, branchId);
+    
+    return items.filter(item => {
+      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           item.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesAvailability = !onlyAvailable || item.is_available_at_branch;
+      
+      return matchesSearch && matchesAvailability;
+    });
+  }
 };

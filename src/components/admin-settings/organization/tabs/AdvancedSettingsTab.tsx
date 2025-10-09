@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Box, Card, Flex, Grid, Heading, Separator, Switch, Text, TextField } from '@radix-ui/themes';
-import { Branch } from '@/data/BranchData';
+// Removed hardcoded import - using real branch data from context
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import CardHeading from '@/components/common/CardHeading';
 
@@ -28,13 +32,10 @@ export default function AdvancedSettingsTab({ branch, onUpdate }: AdvancedSettin
   };
   
   // Update settings
-  const handleSettingChange = <K extends keyof Branch['settings']>(
-    setting: K,
-    value: Branch['settings'][K]
-  ) => {
+  const handleSettingChange = (setting: string, value: any) => {
     onUpdate({
       settings: {
-        ...branch.settings,
+        ...(typeof branch.settings === 'object' && branch.settings !== null ? branch.settings as any : {}),
         [setting]: value
       }
     });
@@ -74,7 +75,7 @@ export default function AdvancedSettingsTab({ branch, onUpdate }: AdvancedSettin
             <Flex align="center" gap="2">
               <Switch 
                 color="green"
-                checked={branch.settings.inventoryTracking}
+                checked={(branch.settings as any)?.inventoryTracking}
                 onCheckedChange={(checked) => 
                   handleSettingChange('inventoryTracking', checked)
                 }
@@ -92,7 +93,7 @@ export default function AdvancedSettingsTab({ branch, onUpdate }: AdvancedSettin
             <Flex align="center" gap="2">
               <Switch 
               color="green"
-              checked={branch.settings.allowLocalMenuOverride}
+                checked={(branch.settings as any)?.allowLocalMenuOverride}
               onCheckedChange={(checked) => 
                 handleSettingChange('allowLocalMenuOverride', checked)
               }

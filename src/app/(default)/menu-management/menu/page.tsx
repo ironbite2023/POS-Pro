@@ -6,10 +6,11 @@ import { PlusIcon, LayoutDashboard, List } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FilterBranchProvider, useFilterBranch } from '@/contexts/FilterBranchContext';
 import { useAppOrganization } from '@/contexts/AppOrganizationContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import BranchFilterInput from '@/components/common/BranchFilterInput';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded organization import - using real organization from context
 import MenuDashboard from '@/components/menu-management/menu/MenuDashboard';
-import MenuList from '@/components/menu-management/menu/MenuList';
+import { MenuList } from '@/components/menu-management/menu/MenuList';
 import MenuItemForm from '@/components/menu-management/MenuItemForm';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -20,17 +21,13 @@ import type { Database } from '@/lib/supabase/database.types';
 
 type MenuItem = Database['public']['Tables']['menu_items']['Row'];
 
-interface MenuItemWithCategory extends MenuItem {
-  category?: Database['public']['Tables']['menu_categories']['Row'] | null;
-}
-
 function MenuContent() {
   usePageTitle('Menu Management');
+  const { branches } = useOrganization();
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeTab = searchParams.get('tab') || 'dashboard';
   const { categories, menuItems, refetch } = useMenuData();
-  const [filteredMenuItems, setFilteredMenuItems] = useState<MenuItemWithCategory[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -66,32 +63,7 @@ function MenuContent() {
     setActiveBranchFilter(activeEntity.id === 'hq' ? null : activeEntity);
   }, [activeEntity, setActiveBranchFilter]);
 
-  useEffect(() => {
-    let filtered = menuItems;
-
-    // Apply search term filter
-    if (searchTerm) {
-      filtered = filtered.filter((item) => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        item.category?.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Apply category filter
-    if (categoryFilter !== 'all') {
-      filtered = filtered.filter((item) => item.category_id === categoryFilter);
-    }
-    
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      const isActive = statusFilter === 'active';
-      filtered = filtered.filter((item) => item.is_active === isActive);
-    }
-    
-    // TODO: Add availability filter when branch overrides are implemented
-    
-    setFilteredMenuItems(filtered);
-  }, [searchTerm, menuItems, categoryFilter, statusFilter, availabilityFilter]);
+  // Filtering is now handled inside MenuList component
 
   const handleAddMenuItem = () => {
     setSelectedItem(undefined);
@@ -152,11 +124,11 @@ function MenuContent() {
             <BranchFilterInput 
               selectedBranch={activeBranchFilter?.id || ''} 
               setSelectedBranch={(id: string) => {
-                const branch = organization.find(o => o.id === id);
+                const branch = branches.find(b => b.id === id);
                 // Preserve the 'tab' query parameter when changing branch filter
                 const params = new URLSearchParams(searchParams.toString());
                 if (branch) {
-                  setActiveBranchFilter(branch);
+                  setActiveBranchFilter(branch as any);
                 } else {
                   setActiveBranchFilter(null);
                 }
@@ -204,14 +176,16 @@ function MenuContent() {
         
         <Tabs.Content value="list">
           <MenuList
+            items={menuItems}
+            categories={categories}
+            availableBranches={branches.map(b => ({ id: b.id, name: b.name }))}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            filteredMenuItems={filteredMenuItems as any}
-            onEditItem={handleEditItem}
-            onDeleteItem={handleDeleteItem}
             categoryFilter={categoryFilter}
             statusFilter={statusFilter}
             availabilityFilter={availabilityFilter}
+            onEdit={handleEditItem}
+            onDelete={handleDeleteItem}
             onCategoryFilterChange={setCategoryFilter}
             onStatusFilterChange={setStatusFilter}
             onAvailabilityFilterChange={setAvailabilityFilter}

@@ -1,8 +1,12 @@
 'use client';
 
 import { Card, Box, Flex, Text, Grid, TextField, Avatar, Button, TextArea } from '@radix-ui/themes';
-import { Supplier, StockCategory } from '@/types/inventory';
-import { ingredientItemCategories } from '@/data/CommonData';
+// Removed hardcoded import - using real inventory categories from database
+import { inventoryService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 import { Select } from '@radix-ui/themes';
 
 interface SupplierGeneralInfoProps {
@@ -11,20 +15,33 @@ interface SupplierGeneralInfoProps {
 }
 
 export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGeneralInfoProps) {
+  // Supplier categories for business categorization
+  const supplierCategories = [
+    'Food & Beverage',
+    'Equipment',
+    'Packaging',
+    'Cleaning Supplies',
+    'Utilities',
+    'Professional Services',
+    'Other'
+  ];
+
   const handleChange = (field: keyof Supplier) => (e: React.ChangeEvent<HTMLInputElement>) => {
     onUpdate({ [field]: e.target.value });
   };
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onUpdate({ notes: e.target.value });
+    // TODO: Add notes field to suppliers table or handle separately
+    console.log('Notes update:', e.target.value);
   };
 
   const handleCategoryChange = (value: string) => {
-    onUpdate({ category: value as StockCategory });
+    // TODO: Add category field to suppliers table if needed for business categorization
+    console.log('Category update:', value);
   };
 
   const handleActiveChange = (value: string) => {
-    onUpdate({ active: value === 'active' });
+    onUpdate({ is_active: value === 'active' });
   };
 
   return (
@@ -36,8 +53,8 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex align="center" gap="2" mb="4">
               <Avatar 
                 size="6" 
-                src={supplier.logoUrl || ''} 
-                fallback={supplier.name.substring(0, 2)} 
+                src="" 
+                fallback={supplier.name ? supplier.name.substring(0, 2).toUpperCase() : 'SP'} 
                 radius="full"
               />
               <Flex align="center" gap="2">
@@ -51,20 +68,12 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                          onUpdate({ logoUrl: e.target?.result as string });
-                        };
-                        reader.readAsDataURL(file);
-                      }
+                      // TODO: Implement logo upload when suppliers table has logo_url field
+                      console.log('Logo upload attempt - not yet implemented');
                     }}
                   />
                 </label>
-                {supplier.logoUrl && (
-                  <Button size="1" variant="outline" color="red">Remove Image</Button>
-                )}
+                {/* TODO: Show remove button when logo functionality is implemented */}
               </Flex>
             </Flex>
             <Flex direction="column" gap="1">
@@ -78,12 +87,12 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">Category</Text>
               <Select.Root 
-                value={supplier.category} 
+                value="Other" 
                 onValueChange={handleCategoryChange}
               >
                 <Select.Trigger className="w-full" />
                 <Select.Content>
-                  {ingredientItemCategories.map(category => (
+                  {supplierCategories.map(category => (
                     <Select.Item key={category} value={category}>{category}</Select.Item>
                   ))}
                 </Select.Content>
@@ -92,7 +101,7 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">Status</Text>
               <Select.Root 
-                value={supplier.active ? 'active' : 'inactive'} 
+                value={supplier.is_active ? 'active' : 'inactive'} 
                 onValueChange={handleActiveChange}
               >
                 <Select.Trigger className="w-full" />
@@ -111,8 +120,8 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">Contact Person</Text>
               <TextField.Root 
-                value={supplier.contactPerson} 
-                onChange={handleChange('contactPerson')}
+                value={supplier.contact_name || ''} 
+                onChange={handleChange('contact_name')}
                 placeholder="Contact Person"
               />
             </Flex>
@@ -138,8 +147,10 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">Address</Text>
               <TextField.Root 
-                value={supplier.address} 
-                onChange={handleChange('address')}
+                value={typeof supplier.address === 'string' ? supplier.address : JSON.stringify(supplier.address || '')} 
+                onChange={(e) => {
+                  onUpdate({ address: e.target.value });
+                }}
                 placeholder="Address"
               />
             </Flex>
@@ -147,9 +158,9 @@ export default function SupplierGeneralInfo({ supplier, onUpdate }: SupplierGene
             <Flex direction="column" gap="1">
               <Text size="2" weight="medium">Notes</Text>
               <TextArea
-                value={supplier.notes || ''} 
+                value="" 
                 onChange={handleNotesChange}
-                placeholder="Additional notes about this supplier"
+                placeholder="Notes feature coming soon - not yet in database schema"
               />
             </Flex>
           </Flex>

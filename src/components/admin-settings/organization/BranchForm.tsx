@@ -11,34 +11,41 @@ import {
 } from '@radix-ui/themes';
 import { Building2, Clock, Save, Settings, Users, X, Trash2, OctagonX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Branch, mockBranches } from '@/data/BranchData';
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 import GeneralInfoTab from './tabs/GeneralInfoTab';
 import ServicesHoursTab from './tabs/ServicesHoursTab';
 import ManagerAssignmentTab from './tabs/ManagerAssignmentTab';
 import AdvancedSettingsTab from './tabs/AdvancedSettingsTab';
-import { regions } from '@/data/BranchData';
+// Removed hardcoded regions - using predefined list
+const regions = ['North', 'South', 'East', 'West', 'Central', 'Downtown', 'Suburban'];
 import { PageHeading } from '@/components/common/PageHeading';
 
 interface BranchFormProps {
   branchId?: string;
 }
 
+// Placeholder data
+const mockBranches: any[] = [];
+
 // Default empty branch template for new branches
-const emptyBranch: Branch = {
+const emptyBranch: any = {
   id: '',
   name: '',
   code: '',
   region: '',
   status: 'active',
   address: '',
-  city: '',
   phone: '',
   services: {
     dineIn: true,
     takeaway: true,
     delivery: false,
   },
-  businessHours: [
+  business_hours: [
     { day: 'Monday', isOpen: true, openTime: '09:00', closeTime: '21:00' },
     { day: 'Tuesday', isOpen: true, openTime: '09:00', closeTime: '21:00' },
     { day: 'Wednesday', isOpen: true, openTime: '09:00', closeTime: '21:00' },

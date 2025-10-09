@@ -1,11 +1,34 @@
 import React, { useState } from 'react';
 import { Avatar, Button, Card, Flex, Heading, Switch, Text, TextField } from '@radix-ui/themes';
-import { User } from '@/data/UserData';
+// Removed hardcoded import - using real user profiles from database
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 import { Upload, X } from 'lucide-react';
 
+interface ExtendedUserProfile {
+  id: string;
+  email: string | null;
+  firstName?: string;
+  lastName?: string;
+  first_name?: string;
+  last_name?: string;
+  avatar?: string;
+  avatar_url?: string;
+  phone?: string | null;
+  status?: string;
+  organization_id?: string;
+  role_id?: string | null;
+  branch_access?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+  last_login?: string | null;
+}
+
 interface ProfileInfoTabProps {
-  user: User;
-  onUpdate: (updates: Partial<User>) => void;
+  user: ExtendedUserProfile;
+  onUpdate: (updates: Partial<ExtendedUserProfile>) => void;
 }
 
 export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) {
@@ -32,7 +55,7 @@ export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) 
   };
   
   // Handle input change
-  const handleInputChange = (field: keyof User, value: any) => {
+  const handleInputChange = (field: keyof ExtendedUserProfile, value: any) => {
     onUpdate({ [field]: value });
   };
   
@@ -47,7 +70,7 @@ export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) 
               <Avatar 
                 size="6" 
                 src={user.avatar || ''} 
-                fallback={`${user.firstName.charAt(0)}${user.lastName.charAt(0)}`}
+                fallback={`${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`}
               />
               <Flex align="center" gap="2">
                 <label>
@@ -77,7 +100,7 @@ export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) 
           <Flex direction="column" gap="1">
             <Text as="label" size="2" weight="medium">Email Address</Text>
             <TextField.Root
-              value={user.email}
+              value={user.email || ''}
               disabled
             />
             <Text size="1" color="gray">Email address cannot be changed</Text>
@@ -88,7 +111,7 @@ export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) 
             <Flex direction="column" gap="1" style={{ width: '50%' }}>
               <Text as="label" size="2" weight="medium">First Name</Text>
               <TextField.Root
-                value={user.firstName}
+                value={user.firstName || ''}
                 disabled
               />
             </Flex>
@@ -96,7 +119,7 @@ export default function ProfileInfoTab({ user, onUpdate }: ProfileInfoTabProps) 
             <Flex direction="column" gap="1" style={{ width: '50%' }}>
               <Text as="label" size="2" weight="medium">Last Name</Text>
               <TextField.Root
-                value={user.lastName}
+                value={user.lastName || ''}
                 disabled
               />
             </Flex>

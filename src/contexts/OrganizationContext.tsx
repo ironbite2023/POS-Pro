@@ -53,7 +53,9 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
   // Load branches
   const loadBranches = useCallback(async (organizationId: string) => {
     try {
+      console.log('OrganizationContext: Loading branches for org:', organizationId);
       const branchList = await organizationService.getBranches(organizationId);
+      console.log('OrganizationContext: Loaded branches:', branchList.length, branchList);
       setBranches(branchList);
       
       // Set default branch (first available branch or from localStorage)
@@ -63,11 +65,14 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
         : branchList[0];
       
       if (defaultBranch) {
+        console.log('OrganizationContext: Setting default branch:', defaultBranch.name);
         setCurrentBranch(defaultBranch);
         localStorage.setItem('currentBranchId', defaultBranch.id);
+      } else {
+        console.warn('OrganizationContext: No default branch found');
       }
     } catch (error) {
-      console.error('Error loading branches:', error);
+      console.error('OrganizationContext: Error loading branches:', error);
       setBranches([]);
     }
   }, []);

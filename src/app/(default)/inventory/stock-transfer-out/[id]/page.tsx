@@ -14,9 +14,12 @@ import {
 import { ArrowLeft, Truck, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
-import { StockRequest, mockStockRequests } from '@/data/StockRequestData';
-import { organization } from '@/data/CommonData';
-import { getStockItemById } from '@/data/StockRequestData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded imports - using real data from database services
+// Placeholder types and functions
+type StockRequest = any;
+const mockStockRequests: any[] = [];
+const getStockItemById = (_id: string) => null;
 import { formatDate } from '@/utilities/index';
 import { getTransferStatusBadge } from '@/utilities/transferStatusBadge';
 import { toast } from 'sonner';
@@ -26,6 +29,7 @@ import { PageHeading } from '@/components/common/PageHeading';
 const RELEVANT_STATUSES = ['Approved', 'Delivering'];
 
 export default function StockTransferOutDetailsPage() {
+  const { branches } = useOrganization();
   const router = useRouter();
   const params = useParams();
   const requestId = params.id as string;
@@ -108,8 +112,8 @@ export default function StockTransferOutDetailsPage() {
   }
 
   // Get origin and destination names
-  const originName = organization.find(org => org.id === stockRequest.originId)?.name || 'Unknown';
-  const destinationName = organization.find(org => org.id === stockRequest.destinationId)?.name || 'Unknown';
+  const originName = branches.find(b => b.id === stockRequest.originId)?.name || 'Unknown';
+  const destinationName = branches.find(b => b.id === stockRequest.destinationId)?.name || 'Unknown';
 
   return (
     <Box className="space-y-4">

@@ -4,7 +4,14 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import PurchaseOrderForm from '@/components/purchasing/purchase-order/PurchaseOrderForm';
 import { Box, Callout } from '@radix-ui/themes';
-import { PurchaseOrder, getPurchaseOrderById, updatePurchaseOrder } from '@/data/PurchaseOrderData';
+// Removed hardcoded imports - using real data from database services
+// Removed unused imports suppliersService and useOrganization
+// Placeholder functions
+const getPurchaseOrderById = (_id: string) => null;
+const updatePurchaseOrder = (_id: string, _data: any) => null;
+import type { Database } from '@/lib/supabase/database.types';
+
+type PurchaseOrder = Database['public']['Tables']['purchase_orders']['Row'];
 import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -16,7 +23,7 @@ export default function PurchaseOrderDetailsPage() {
   const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  usePageTitle(purchaseOrder?.poNumber);
+  usePageTitle(purchaseOrder?.po_number);
 
   useEffect(() => {
     // Fetch purchase order data
@@ -51,7 +58,7 @@ export default function PurchaseOrderDetailsPage() {
       return;
     }
     
-    if (purchaseOrder.orderStatus !== 'Draft') {
+    if (purchaseOrder.status !== 'Draft') {
       toast.error("Only purchase orders in Draft status can be edited.");
       return;
     }

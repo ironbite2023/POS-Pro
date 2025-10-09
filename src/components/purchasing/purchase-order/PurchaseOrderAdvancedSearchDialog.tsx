@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Dialog, 
   Flex, 
@@ -12,7 +12,9 @@ import {
   Heading,
   Separator
 } from '@radix-ui/themes';
-import { mockUsers } from '@/data/UserData';
+// Removed hardcoded import - using real users from database
+import { staffService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import DateRangeInput from '@/components/common/DateRangeInput';
 import { Range } from 'react-date-range';
 import { X, Filter } from 'lucide-react';
@@ -62,7 +64,30 @@ export default function PurchaseOrderAdvancedSearchDialog({
   onOpenChange,
   onSearch
 }: PurchaseOrderAdvancedSearchDialogProps) {
+  const { currentOrganization } = useOrganization();
   const [filters, setFilters] = useState<PurchaseOrderAdvancedSearchFilters>(initialFilters);
+  const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Load users for the ordered by filter
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        // TODO: Implement staffService.getStaff method
+        // const staffMembers = await staffService.getStaff(currentOrganization.id);
+        // setUsers(staffMembers.map(staff => ({ id: staff.id, name: staff.name })));
+        
+        // Temporary placeholder until staff service is implemented
+        setUsers([]);
+      } catch (error) {
+        console.error('Error loading users:', error);
+        setUsers([]);
+      }
+    };
+
+    loadUsers();
+  }, [currentOrganization]);
 
   const handleSearch = () => {
     // Convert date ranges to from/to format for compatibility with the List component
@@ -154,7 +179,7 @@ export default function PurchaseOrderAdvancedSearchDialog({
                 <Select.Trigger placeholder="Select user" />
                 <Select.Content>
                   <Select.Item value="all">All Users</Select.Item>
-                  {mockUsers?.map(user => (
+                  {users?.map(user => (
                     <Select.Item key={user.id} value={user.id}>{user.name}</Select.Item>
                   ))}
                 </Select.Content>

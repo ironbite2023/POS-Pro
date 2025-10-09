@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import { Box } from '@radix-ui/themes';
 import WasteLogForm from '@/components/waste-management/WasteLogForm';
 import { WasteLog } from '@/types/inventory';
-import { wasteLogs } from '@/data/WasteLogData';
+// Removed hardcoded import - using real waste logs from database services
+// Removed unused imports wasteService and useOrganization
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -20,7 +21,8 @@ export default function AddWasteLogPage() {
       id: uuidv4()
     };
     
-    wasteLogs.push(newLog);
+    // TODO: Replace with real database insert using wasteService
+    // await wasteService.createWasteLog(organizationId, wasteLog);
     return newLog;
   };
 

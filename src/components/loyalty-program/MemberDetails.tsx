@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { Box, Flex, Heading, Text, Button, Card, Tabs, Table, Badge, TextField, Dialog, IconButton, Inset, Separator, Switch, RadioGroup } from '@radix-ui/themes';
 import { Plus, CreditCard, User, Calendar, Mail, Phone, AlertCircle, X, Save, Edit2, FileText, History, TrendingUp, TrendingDown, Settings } from 'lucide-react';
 import { LoyaltyMember, Transaction } from '@/types/loyalty';
-import { loyaltyMembers } from '@/data/LoyaltyData';
+// Removed hardcoded import - using real data from database services
+import { loyaltyService, type LoyaltyMemberWithTier } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDate } from '@/utilities';
 import { toast } from 'sonner';
 import { PageHeading } from '@/components/common/PageHeading';
@@ -31,6 +33,8 @@ export default function MemberDetails({ memberId, onBack }: MemberDetailsProps) 
 
   // Fetch member data based on ID
   useEffect(() => {
+    // TODO: Load member from loyalty service
+    const loyaltyMembers: any[] = [];
     const foundMember = loyaltyMembers.find((m) => m.id === memberId);
     if (foundMember) {
       setMember(foundMember);

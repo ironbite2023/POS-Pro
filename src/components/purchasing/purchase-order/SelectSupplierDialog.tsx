@@ -1,9 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, TextField, Table, Text, Flex, Button, ScrollArea, Box } from '@radix-ui/themes';
 import { Search, X } from 'lucide-react';
-import { mockSuppliers } from '@/data/SupplierData';
+// Removed hardcoded import - using real suppliers from database
+import { suppliersService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Supplier = Database['public']['Tables']['suppliers']['Row'];
 
 interface SelectSupplierDialogProps {
   open: boolean;
@@ -16,12 +21,31 @@ export default function SelectSupplierDialog({
   onOpenChange,
   onSelectSupplier
 }: SelectSupplierDialogProps) {
+  const { currentOrganization } = useOrganization();
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   
-  const filteredSuppliers = mockSuppliers.filter(supplier => 
+  // Load suppliers from database
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const supplierData = await suppliersService.getSuppliers(currentOrganization.id);
+        setSuppliers(supplierData);
+      } catch (error) {
+        console.error('Error loading suppliers:', error);
+        setSuppliers([]);
+      }
+    };
+
+    loadSuppliers();
+  }, [currentOrganization, open]);
+  
+  const filteredSuppliers = suppliers.filter(supplier => 
     supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
-    supplier.contactPerson.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
-    supplier.category.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+    (supplier.contact_name || '').toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
+    (supplier.email || '').toLowerCase().includes(supplierSearchTerm.toLowerCase())
   );
   
   return (
@@ -68,10 +92,10 @@ export default function SelectSupplierDialog({
                     <Table.Cell>
                       <Text weight="bold">{supplier.name}</Text>
                     </Table.Cell>
-                    <Table.Cell>{supplier.category}</Table.Cell>
+                    <Table.Cell>General</Table.Cell> {/* TODO: Add category field to suppliers table if needed */}
                     <Table.Cell>
-                      <Text as="p">{supplier.contactPerson}</Text>
-                      <Text size="1" color="gray">{supplier.email}</Text>
+                      <Text as="p">{supplier.contact_name || 'No contact'}</Text>
+                      <Text size="1" color="gray">{supplier.email || 'No email'}</Text>
                     </Table.Cell>
                     <Table.Cell>
                       <Button size="1" onClick={() => onSelectSupplier(supplier.id)}>

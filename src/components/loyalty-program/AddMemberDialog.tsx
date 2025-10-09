@@ -4,7 +4,13 @@ import { useState } from 'react';
 import { Dialog, Flex, Text, TextField, Select, Button } from '@radix-ui/themes';
 import { X, Save } from 'lucide-react';
 import { LoyaltyMember } from '@/types/loyalty';
-import { membershipTiers } from '@/data/LoyaltyData';
+// Removed hardcoded import - using real tiers from database services
+import { loyaltyService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type LoyaltyTier = Database['public']['Tables']['loyalty_tiers']['Row'];
 import { toast } from 'sonner';
 
 interface AddMemberDialogProps {
@@ -14,6 +20,9 @@ interface AddMemberDialogProps {
 }
 
 export default function AddMemberDialog({ open, onOpenChange, onAddMember }: AddMemberDialogProps) {
+  // TODO: Load tiers from loyalty service
+  const membershipTiers: any[] = [];
+  
   const [newMember, setNewMember] = useState<Partial<LoyaltyMember>>({
     name: '',
     email: '',

@@ -10,20 +10,23 @@ import {
   TextField
 } from '@radix-ui/themes';
 import { Plus, Search, RefreshCcw } from 'lucide-react';
-import { organization } from '@/data/CommonData';
-import { 
-  mockStockRequests, 
-  StockRequest,
-} from '@/data/StockRequestData';
+import { useRouter } from 'next/navigation';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded import - using real data from database services
+// Note: Stock request data will use inventoryService
 import StockRequestTable from '@/components/inventory/StockRequestTable';
 import Pagination from '@/components/common/Pagination';
-import { useRouter } from 'next/navigation';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+// Placeholder types and functions
+type StockRequest = any;
+const mockStockRequests: any[] = [];
 
 const ITEMS_PER_PAGE = 10;
 
 function StockRequestContent() {
+  const { branches } = useOrganization();
   const [stockRequests, setStockRequests] = useState<StockRequest[]>(mockStockRequests);
   const [filteredRequests, setFilteredRequests] = useState<StockRequest[]>(mockStockRequests);
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,8 +46,8 @@ function StockRequestContent() {
       result = result.filter(
         request => 
           request.requestNumber.toLowerCase().includes(term) ||
-          organization.find(org => org.id === request.originId)?.name.toLowerCase().includes(term) ||
-          organization.find(org => org.id === request.destinationId)?.name.toLowerCase().includes(term)
+          branches.find(b => b.id === request.originId)?.name.toLowerCase().includes(term) ||
+          branches.find(b => b.id === request.destinationId)?.name.toLowerCase().includes(term)
       );
     }
     
@@ -62,7 +65,7 @@ function StockRequestContent() {
     
     setFilteredRequests(result);
     setCurrentPage(1);
-  }, [stockRequests, searchTerm, statusFilter, originFilter, destinationFilter]);
+  }, [stockRequests, searchTerm, statusFilter, originFilter, destinationFilter, branches]);
   
   const handleAddClick = () => {
     router.push('/inventory/stock-request/add');
@@ -156,9 +159,9 @@ function StockRequestContent() {
                 <Select.Trigger placeholder="All Origins" />
                 <Select.Content>
                   <Select.Item value="all">All Origins</Select.Item>
-                  {organization.map(org => (
-                    <Select.Item key={org.id} value={org.id}>
-                      {org.name}
+                  {branches.map(branch => (
+                    <Select.Item key={branch.id} value={branch.id}>
+                      {branch.name}
                     </Select.Item>
                   ))}
                 </Select.Content>
@@ -171,9 +174,9 @@ function StockRequestContent() {
                 <Select.Trigger placeholder="All Destinations" />
                 <Select.Content>
                   <Select.Item value="all">All Destinations</Select.Item>
-                  {organization.map(org => (
-                    <Select.Item key={org.id} value={org.id}>
-                      {org.name}
+                  {branches.map(branch => (
+                    <Select.Item key={branch.id} value={branch.id}>
+                      {branch.name}
                     </Select.Item>
                   ))}
                 </Select.Content>

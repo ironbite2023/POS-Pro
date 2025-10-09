@@ -14,16 +14,22 @@ import {
   Callout
 } from '@radix-ui/themes';
 import { Search, Filter, X, RefreshCcw } from 'lucide-react';
-import { PurchaseOrder, mockPurchaseOrders, filterPurchaseOrders, getPurchaseOrdersByOrganization } from '@/data/PurchaseOrderData';
+// Removed hardcoded imports - using real data from database services
+import { suppliersService, type PurchaseOrderWithItems } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type PurchaseOrder = Database['public']['Tables']['purchase_orders']['Row'];
 import Pagination from '@/components/common/Pagination';
 import PurchaseOrderAdvancedSearchDialog from './PurchaseOrderAdvancedSearchDialog';
 import { formatDate } from '@/utilities';
 import { useFilterBranch } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded organization import - using real organization from context
 import { SortableHeader } from '@/components/common/SortableHeader';
 
 export default function PurchaseOrderList() {
   const router = useRouter();
+  const { currentOrganization } = useOrganization();
   const { activeBranchFilter } = useFilterBranch();
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [filteredPOs, setFilteredPOs] = useState<PurchaseOrder[]>([]);
@@ -46,20 +52,30 @@ export default function PurchaseOrderList() {
     setSortConfig({ key, direction });
   };
 
-  // Get initial data based on branch filter
+  // Load purchase orders from database
   useEffect(() => {
-    // Get purchase orders based on selected branch filter
-    const branchPOs = activeBranchFilter
-      ? getPurchaseOrdersByOrganization(activeBranchFilter.id)
-      : mockPurchaseOrders; // Show all if no filter
+    const loadPurchaseOrders = async () => {
+      if (!currentOrganization) return;
       
-    setPurchaseOrders(branchPOs);
-    setFilteredPOs(branchPOs);
-    
-    // Reset pagination when branch filter changes
+      try {
+        // TODO: Implement suppliersService.getPurchaseOrders method
+        // const orders = await suppliersService.getPurchaseOrders(currentOrganization.id);
+        // setPurchaseOrders(orders);
+        // setFilteredPOs(orders);
+        
+        // Temporary: Set empty array until service is implemented
+        setPurchaseOrders([]);
+        setFilteredPOs([]);
+      } catch (error) {
+        console.error('Error loading purchase orders:', error);
+        setPurchaseOrders([]);
+        setFilteredPOs([]);
+      }
+    };
+
+    loadPurchaseOrders();
     setCurrentPage(1);
-    
-  }, [activeBranchFilter]);
+  }, [currentOrganization, activeBranchFilter]);
   
   // Handle search and filters
   useEffect(() => {
@@ -67,82 +83,84 @@ export default function PurchaseOrderList() {
     
     // Apply search
     if (searchQuery) {
-      result = filterPurchaseOrders(result, searchQuery, null);
+      const query = searchQuery.toLowerCase();
+      result = result.filter(po => 
+        po.po_number?.toLowerCase().includes(query) ||
+        po.notes?.toLowerCase().includes(query) ||
+        po.status?.toLowerCase().includes(query)
+      );
     }
     
     // Apply simple filters
     if (filters.orderStatus !== 'all') {
-      result = result.filter(po => po.orderStatus === filters.orderStatus);
+      result = result.filter(po => po.status === filters.orderStatus);
     }
     
+    // TODO: Implement payment status filtering when payment schema is added
     if (filters.paymentStatus !== 'all') {
-      result = result.filter(po => po.paymentStatus === filters.paymentStatus);
+      // result = result.filter(po => po.payment_status === filters.paymentStatus);
     }
     
     // Apply advanced filters if they exist
     if (advancedFilters) {
       if (advancedFilters.poNumber) {
-        result = result.filter(po => po.poNumber.toLowerCase().includes(advancedFilters.poNumber.toLowerCase()));
+        result = result.filter(po => po.po_number?.toLowerCase().includes(advancedFilters.poNumber.toLowerCase()));
       }
       
       if (advancedFilters.orderedBy && advancedFilters.orderedBy !== 'all') {
-        result = result.filter(po => po.orderedBy.toLowerCase().includes(advancedFilters.orderedBy.toLowerCase()));
+        result = result.filter(po => po.created_by?.toLowerCase().includes(advancedFilters.orderedBy.toLowerCase()));
       }
       
+      // TODO: Implement supplier name filtering when supplier relationship is properly implemented
       if (advancedFilters.supplierName) {
-        result = result.filter(po => po.supplierName.toLowerCase().includes(advancedFilters.supplierName.toLowerCase()));
+        // result = result.filter(po => po.supplier_name.toLowerCase().includes(advancedFilters.supplierName.toLowerCase()));
       }
       
+      // TODO: Implement contact name filtering when supplier details schema is implemented
       if (advancedFilters.contactName) {
-        result = result.filter(po => 
-          po.supplierDetails?.contactName?.toLowerCase().includes(advancedFilters.contactName.toLowerCase())
-        );
+        // result = result.filter(po => po.supplier_contact_name?.toLowerCase().includes(advancedFilters.contactName.toLowerCase()));
       }
       
       if (advancedFilters.orderDateFrom) {
         const fromDate = new Date(advancedFilters.orderDateFrom);
-        result = result.filter(po => new Date(po.dateCreated) >= fromDate);
+        result = result.filter(po => new Date(po.order_date || po.created_at || '') >= fromDate);
       }
       
       if (advancedFilters.orderDateTo) {
         const toDate = new Date(advancedFilters.orderDateTo);
         toDate.setHours(23, 59, 59, 999); // End of the day
-        result = result.filter(po => new Date(po.dateCreated) <= toDate);
+        result = result.filter(po => new Date(po.order_date || po.created_at || '') <= toDate);
       }
       
       if (advancedFilters.orderStatus && advancedFilters.orderStatus !== 'all') {
-        result = result.filter(po => po.orderStatus === advancedFilters.orderStatus);
+        result = result.filter(po => po.status === advancedFilters.orderStatus);
       }
       
+      // TODO: Implement tracking number filtering when shipping schema is added
       if (advancedFilters.trackingNumber) {
-        result = result.filter(po => 
-          po.shippingDetails?.trackingNumber?.toLowerCase().includes(advancedFilters.trackingNumber.toLowerCase())
-        );
+        // result = result.filter(po => po.tracking_number?.toLowerCase().includes(advancedFilters.trackingNumber.toLowerCase()));
       }
       
+      // TODO: Implement payment status filtering when payment schema is added
       if (advancedFilters.paymentStatus && advancedFilters.paymentStatus !== 'all') {
-        result = result.filter(po => po.paymentStatus === advancedFilters.paymentStatus);
+        // result = result.filter(po => po.payment_status === advancedFilters.paymentStatus);
       }
       
+      // TODO: Implement invoice number filtering when payment schema is added
       if (advancedFilters.invoiceNumber) {
-        result = result.filter(po => 
-          po.paymentDetails?.invoiceNumber?.toLowerCase().includes(advancedFilters.invoiceNumber.toLowerCase())
-        );
+        // result = result.filter(po => po.invoice_number?.toLowerCase().includes(advancedFilters.invoiceNumber.toLowerCase()));
       }
       
+      // TODO: Implement date paid filtering when payment schema is added
       if (advancedFilters.datePaidFrom) {
-        const fromDate = new Date(advancedFilters.datePaidFrom);
-        result = result.filter(po => 
-          po.paymentDetails?.datePaid ? new Date(po.paymentDetails.datePaid) >= fromDate : false
-        );
+        // const fromDate = new Date(advancedFilters.datePaidFrom);
+        // result = result.filter(po => po.date_paid ? new Date(po.date_paid) >= fromDate : false);
       }
       
       if (advancedFilters.datePaidTo) {
-        const toDate = new Date(advancedFilters.datePaidTo);
-        toDate.setHours(23, 59, 59, 999); // End of the day
-        result = result.filter(po => 
-          po.paymentDetails?.datePaid ? new Date(po.paymentDetails.datePaid) <= toDate : false
-        );
+        // const toDate = new Date(advancedFilters.datePaidTo);
+        // toDate.setHours(23, 59, 59, 999); // End of the day
+        // result = result.filter(po => po.date_paid ? new Date(po.date_paid) <= toDate : false);
       }
     }
 
@@ -154,36 +172,37 @@ export default function PurchaseOrderList() {
 
         switch (sortConfig.key) {
           case 'poNumber':
-            aValue = a.poNumber.toLowerCase();
-            bValue = b.poNumber.toLowerCase();
+            aValue = (a.po_number || '').toLowerCase();
+            bValue = (b.po_number || '').toLowerCase();
             break;
           case 'branch':
-            aValue = organization.find(o => o.id === a.organizationId)?.name || '';
-            bValue = organization.find(o => o.id === b.organizationId)?.name || '';
+            aValue = a.organization_id || '';
+            bValue = b.organization_id || '';
             break;
           case 'dateCreated':
-            aValue = new Date(a.dateCreated).getTime();
-            bValue = new Date(b.dateCreated).getTime();
+            aValue = new Date(a.order_date || a.created_at || '').getTime();
+            bValue = new Date(b.order_date || b.created_at || '').getTime();
             break;
           case 'supplier':
-            aValue = a.supplierName.toLowerCase();
-            bValue = b.supplierName.toLowerCase();
+            aValue = a.supplier_id || '';
+            bValue = b.supplier_id || '';
             break;
           case 'orderStatus':
-            aValue = a.orderStatus;
-            bValue = b.orderStatus;
+            aValue = a.status;
+            bValue = b.status;
             break;
           case 'totalValue':
-            aValue = a.totalOrderValue;
-            bValue = b.totalOrderValue;
+            aValue = a.total_amount;
+            bValue = b.total_amount;
             break;
           case 'expectedDelivery':
-            aValue = new Date(a.expectedDeliveryDate).getTime();
-            bValue = new Date(b.expectedDeliveryDate).getTime();
+            aValue = new Date(a.expected_delivery_date || '').getTime();
+            bValue = new Date(b.expected_delivery_date || '').getTime();
             break;
           case 'paymentStatus':
-            aValue = a.paymentStatus;
-            bValue = b.paymentStatus;
+            // TODO: Use actual payment status when payment schema is implemented
+            aValue = 'pending';
+            bValue = 'pending';
             break;
           default:
             return 0;
@@ -227,7 +246,7 @@ export default function PurchaseOrderList() {
     setAdvancedFilters(null);
   };
   
-  const getStatusColor = (status: PurchaseOrder['orderStatus']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'Draft': return 'gray';
       case 'Pending': return 'amber';
@@ -239,7 +258,7 @@ export default function PurchaseOrderList() {
     }
   };
   
-  const getPaymentStatusColor = (status: PurchaseOrder['paymentStatus']) => {
+  const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case 'Paid': return 'green';
       case 'Partially Paid': return 'amber';
@@ -435,21 +454,21 @@ export default function PurchaseOrderList() {
                   className="cursor-pointer hover:bg-slate-50 dark:hover:bg-neutral-800"
                 >
                   <Table.Cell>
-                    <Text weight="bold">{po.poNumber}</Text>
+                    <Text weight="bold">{po.po_number}</Text>
                   </Table.Cell>
-                  <Table.Cell>{organization.find(o => o.id === po.organizationId)?.name}</Table.Cell>
-                  <Table.Cell>{formatDateString(po.dateCreated)}</Table.Cell>
-                  <Table.Cell>{po.supplierName}</Table.Cell>
+                  <Table.Cell>{po.organization_id?.slice(0, 8) || 'N/A'}...</Table.Cell>
+                  <Table.Cell>{formatDateString(po.order_date || po.created_at || '')}</Table.Cell>
+                  <Table.Cell>{po.supplier_id || 'N/A'}</Table.Cell>
                   <Table.Cell>
-                    <Badge color={getStatusColor(po.orderStatus)}>
-                      {po.orderStatus}
+                    <Badge color={getStatusColor(po.status)}>
+                      {po.status}
                     </Badge>
                   </Table.Cell>
-                  <Table.Cell align="right">${po.totalOrderValue.toFixed(2)}</Table.Cell>
-                  <Table.Cell>{formatDateString(po.expectedDeliveryDate)}</Table.Cell>
+                  <Table.Cell align="right">${po.total_amount.toFixed(2)}</Table.Cell>
+                  <Table.Cell>{formatDateString(po.expected_delivery_date || '')}</Table.Cell>
                   <Table.Cell>
-                    <Badge color={getPaymentStatusColor(po.paymentStatus)}>
-                      {po.paymentStatus}
+                    <Badge color={getPaymentStatusColor('pending')}>
+                      Pending {/* TODO: Show actual payment status when schema is implemented */}
                     </Badge>
                   </Table.Cell>
                 </Table.Row>

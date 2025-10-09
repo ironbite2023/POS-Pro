@@ -11,8 +11,11 @@ import {
   Badge,
 } from '@radix-ui/themes';
 import { Search, RefreshCcw } from 'lucide-react';
-import { organization } from '@/data/CommonData';
-import { StockRequest, mockStockRequests } from '@/data/StockRequestData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded imports - using real data from database services
+// Placeholder types and data
+type StockRequest = any;
+const mockStockRequests: any[] = [];
 import StockTransferOutTable from '@/components/inventory/StockTransferOutTable';
 import Pagination from '@/components/common/Pagination';
 import { useRouter } from 'next/navigation';
@@ -24,6 +27,7 @@ const RELEVANT_STATUSES = ['Approved', 'Delivering'];
 const ASSUMED_ORIGIN = 'br-1';
 
 function StockTransferOutContent() {
+  const { branches } = useOrganization();
   const [allStockRequests] = useState<StockRequest[]>(mockStockRequests);
   const [filteredRequests, setFilteredRequests] = useState<StockRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,8 +46,8 @@ function StockTransferOutContent() {
       result = result.filter(
         request =>
           request.requestNumber.toLowerCase().includes(term) ||
-          (organization.find(org => org.id === request.originId)?.name.toLowerCase() || '').includes(term) ||
-          (organization.find(org => org.id === request.destinationId)?.name.toLowerCase() || '').includes(term)
+          (branches.find(b => b.id === request.originId)?.name.toLowerCase() || '').includes(term) ||
+          (branches.find(b => b.id === request.destinationId)?.name.toLowerCase() || '').includes(term)
       );
     }
 
@@ -57,7 +61,7 @@ function StockTransferOutContent() {
 
     setFilteredRequests(result);
     setCurrentPage(1);
-  }, [allStockRequests, searchTerm, statusFilter, originFilter, destinationFilter]);
+  }, [allStockRequests, searchTerm, statusFilter, originFilter, destinationFilter, branches]);
 
   const handleViewClick = (request: StockRequest) => {
     router.push(`/inventory/stock-transfer-out/${request.id}`);
@@ -81,7 +85,7 @@ function StockTransferOutContent() {
         <PageHeading 
           title="Stock Transfer Out" 
           description="Process and manage stock transfer out requests."
-          badge={<Badge>Origin: {organization.find(org => org.id === ASSUMED_ORIGIN)?.name}</Badge>}
+          badge={<Badge>Origin: {branches.find(b => b.id === ASSUMED_ORIGIN)?.name}</Badge>}
           noMarginBottom
         />
       </Flex>
@@ -117,9 +121,9 @@ function StockTransferOutContent() {
               <Select.Trigger placeholder="All Destinations" />
               <Select.Content>
                 <Select.Item value="all">All Destinations</Select.Item>
-                {organization.filter(org => org.id !== ASSUMED_ORIGIN).map(org => (
-                  <Select.Item key={org.id} value={org.id}>
-                    {org.name}
+                {branches.filter(b => b.id !== ASSUMED_ORIGIN).map(branch => (
+                  <Select.Item key={branch.id} value={branch.id}>
+                    {branch.name}
                   </Select.Item>
                 ))}
               </Select.Content>

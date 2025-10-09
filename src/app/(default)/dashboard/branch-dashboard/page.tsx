@@ -65,33 +65,6 @@ export default function BranchDashboard() {
       </Container>
     );
   }
-
-  // Mock data for staff (will be replaced in future tasks)
-  const mockStaff = [
-    { id: 'emp-001', name: 'David Key', position: 'Shift Manager', status: 'active', checkIn: '08:00 AM', photo: '/images/staff/male1.jpg' },
-    { id: 'emp-002', name: 'Lisa Cherry', position: 'Chef', status: 'active', checkIn: '08:15 AM', photo: '' },
-    { id: 'emp-003', name: 'Robert Jones', position: 'Server', status: 'active', checkIn: '08:30 AM', photo: '/images/staff/male2.jpg' },
-    { id: 'emp-004', name: 'Emily Davis', position: 'Server', status: 'break', checkIn: '08:45 AM', photo: '/images/staff/female2.jpg' },
-    { id: 'emp-005', name: 'Carlos Rodriguez', position: 'Cashier', status: 'active', checkIn: '09:00 AM', photo: '/images/staff/male3.jpg' },
-  ];
-
-  // Mock hourly data for charts
-  const mockHourlyData = [
-    { hour: '8 AM', orders: 5 },
-    { hour: '9 AM', orders: 7 },
-    { hour: '10 AM', orders: 8 },
-    { hour: '11 AM', orders: 12 },
-    { hour: '12 PM', orders: 22 },
-    { hour: '1 PM', orders: 18 },
-    { hour: '2 PM', orders: 14 },
-    { hour: '3 PM', orders: 9 },
-    { hour: '4 PM', orders: 7 },
-    { hour: '5 PM', orders: 11 },
-    { hour: '6 PM', orders: 19 },
-    { hour: '7 PM', orders: 15 },
-    { hour: '8 PM', orders: 10 },
-    { hour: '9 PM', orders: 6 },
-  ];
   
   return (
     <Box className="space-y-6">
@@ -158,9 +131,9 @@ export default function BranchDashboard() {
           <CardHeading title="Hourly Order Trends" />
           <div className="h-[300px]">
             {isClient ? (
-              chartsLoading ? (
+              chartsLoading || metrics.loading ? (
                 <ChartLoadingPlaceholder height={300} />
-              ) : (
+              ) : metrics.hourlyTrends.length > 0 ? (
                 <ReactApexChart
                   type="line"
                   height={300}
@@ -168,7 +141,7 @@ export default function BranchDashboard() {
                     colors: [chartColorPalettes.cool[3]],
                     xaxis: {
                       ...chartOptions.getBaseXAxisOptions(),
-                      categories: mockHourlyData.map(item => item.hour),
+                      categories: metrics.hourlyTrends.map(item => item.hour),
                     },
                     tooltip: {
                       ...chartOptions.getBaseTooltipOptions(),
@@ -177,10 +150,14 @@ export default function BranchDashboard() {
                   series={[
                     {
                       name: 'Orders',
-                      data: mockHourlyData.map(item => item.orders),
+                      data: metrics.hourlyTrends.map(item => item.orders),
                     }
                   ]}
                 />
+              ) : (
+                <Box className="flex items-center justify-center h-full">
+                  <Text color="gray">No order data available for this period</Text>
+                </Box>
               )
             ) : (
               <ChartLoadingPlaceholder height={300} />
@@ -228,38 +205,52 @@ export default function BranchDashboard() {
         )}
       </Card>
 
-      {/* Staff Section (mock data for now) */}
+      {/* Staff Section with Real Data from Database */}
       <Card size="3">
         <CardHeading title="Staff On Duty" mb="4" />
-        <Inset>
-          {mockStaff.map((staff, index) => (
-            <React.Fragment key={staff.id}>
-              <Flex align="center" justify="between" px="5" py="3" className="hover:bg-gray-50 dark:hover:bg-neutral-800">
-                <Flex align="center" gap="3">
-                  <Avatar 
-                    src={staff.photo} 
-                    fallback={staff.name.split(' ').map(n => n[0]).join('')}
-                    size="2"
-                    radius="full"
-                  />
-                  <Box>
-                    <Text as="p" size="2" weight="medium">{staff.name}</Text>
-                    <Text as="p" size="1" color="gray">{staff.position}</Text>
-                  </Box>
+        {metrics.loading ? (
+          <Box className="text-center py-8">
+            <Text color="gray">Loading staff data...</Text>
+          </Box>
+        ) : metrics.staffOnDuty.length > 0 ? (
+          <Inset>
+            {metrics.staffOnDuty.map((staff, index) => (
+              <React.Fragment key={staff.id}>
+                <Flex align="center" justify="between" px="5" py="3" className="hover:bg-gray-50 dark:hover:bg-neutral-800">
+                  <Flex align="center" gap="3">
+                    <Avatar 
+                      src={staff.avatar || undefined} 
+                      fallback={`${staff.firstName[0] || '?'}${staff.lastName[0] || '?'}`}
+                      size="2"
+                      radius="full"
+                    />
+                    <Box>
+                      <Text as="p" size="2" weight="medium">{staff.name}</Text>
+                      <Text as="p" size="1" color="gray">{staff.role}</Text>
+                    </Box>
+                  </Flex>
+                  <Flex align="center" gap="3">
+                    <Badge color={staff.status === 'active' ? 'green' : 'yellow'}>
+                      {staff.status}
+                    </Badge>
+                    {staff.lastLogin && (
+                      <Text size="1" color="gray">
+                        Last active: {new Date(staff.lastLogin).toLocaleDateString()}
+                      </Text>
+                    )}
+                  </Flex>
                 </Flex>
-                <Flex align="center" gap="3">
-                  <Badge color={staff.status === 'active' ? 'green' : 'yellow'}>
-                    {staff.status}
-                  </Badge>
-                  <Text size="1" color="gray">Check-in: {staff.checkIn}</Text>
-                </Flex>
-              </Flex>
-              {index < mockStaff.length - 1 && (
-                <Box style={{ height: '1px', backgroundColor: 'var(--gray-4)' }} />
-              )}
-            </React.Fragment>
-          ))}
-        </Inset>
+                {index < metrics.staffOnDuty.length - 1 && (
+                  <Box style={{ height: '1px', backgroundColor: 'var(--gray-4)' }} />
+                )}
+              </React.Fragment>
+            ))}
+          </Inset>
+        ) : (
+          <Box className="text-center py-8">
+            <Text color="gray">No staff members assigned to this branch</Text>
+          </Box>
+        )}
       </Card>
 
       {/* Inventory Alert */}

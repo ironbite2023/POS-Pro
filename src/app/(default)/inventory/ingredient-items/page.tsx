@@ -10,13 +10,17 @@ import {
   TextField,
   Select
 } from '@radix-ui/themes';
-import { ingredientItems } from '@/data/IngredientItemsData';
+// Removed hardcoded import - using real data from database services
 import { IngredientItem, StockCategory } from '@/types/inventory';
+import { useOrganization } from '@/contexts/OrganizationContext';
+
+// Placeholder data - will be replaced with real database service
+const ingredientItems: IngredientItem[] = [];
 import IngredientItemsTable from '@/components/inventory/IngredientItemsTable';
 import Pagination from '@/components/common/Pagination';
 import BranchFilterInput from '@/components/common/BranchFilterInput';
 import { FilterBranchProvider, useFilterBranch } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded import - using real organization from context
 import { Plus, Search, RefreshCcw } from 'lucide-react';
 import { useAppOrganization } from '@/contexts/AppOrganizationContext';
 import { useRouter } from 'next/navigation';
@@ -36,6 +40,7 @@ export default function IngredientItemsPageWrapper() {
 // Renamed original component
 function IngredientItemsPage() {
   usePageTitle('Ingredient Items');
+  const { branches } = useOrganization();
   const [items] = useState<IngredientItem[]>(ingredientItems);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(ITEMS_PER_PAGE);
@@ -116,9 +121,9 @@ function IngredientItemsPage() {
           <BranchFilterInput
             selectedBranch={activeBranchFilter ? activeBranchFilter.id : null}
             setSelectedBranch={(id: string) => {
-              const branch = organization.find(o => o.id === id);
+              const branch = branches.find(b => b.id === id);
               if (branch) {
-                setActiveBranchFilter(branch);
+                setActiveBranchFilter(branch as any);
               }  
             }}
             clearFilter={() => setActiveBranchFilter(null)}

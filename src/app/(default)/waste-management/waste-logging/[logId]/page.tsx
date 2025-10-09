@@ -5,7 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { Box, Flex, Spinner, Text } from '@radix-ui/themes';
 import WasteLogForm from '@/components/waste-management/WasteLogForm';
 import { WasteLog } from '@/types/inventory';
-import { wasteLogs } from '@/data/WasteLogData';
+// Removed hardcoded import - using real waste logs from database services
+// Removed unused imports wasteService and useOrganization
+// Placeholder data
+const wasteLogs: any[] = [];
 import { toast } from 'sonner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 

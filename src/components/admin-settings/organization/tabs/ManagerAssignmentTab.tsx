@@ -1,6 +1,10 @@
 import React from 'react';
 import { Box, Card, Flex, Heading, Select, Text } from '@radix-ui/themes';
-import { Branch } from '@/data/BranchData';
+// Removed hardcoded import - using real branch data from context
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 import { User } from '@/types/user';
 
 // Mock users data for manager selection
@@ -62,13 +66,13 @@ export default function ManagerAssignmentTab({ branch, onUpdate }: ManagerAssign
   // Handle branch manager change
   const handleBranchManagerChange = (userId: string) => {
     const selectedManager = mockManagers.find(manager => manager.id === userId);
-    onUpdate({ manager: selectedManager });
+    (onUpdate as any)({ manager: selectedManager });
   };
   
   // Handle regional manager change
   const handleRegionalManagerChange = (userId: string) => {
     const selectedManager = mockRegionalManagers.find(manager => manager.id === userId);
-    onUpdate({ regionalManager: selectedManager });
+    (onUpdate as any)({ regionalManager: selectedManager });
   };
   
   return (
@@ -79,7 +83,7 @@ export default function ManagerAssignmentTab({ branch, onUpdate }: ManagerAssign
             Regional Manager
           </Text>
           <Select.Root 
-            value={branch.regionalManager?.id || ''}
+            value={(branch as any).regionalManager?.id || ''}
             onValueChange={handleRegionalManagerChange}
           >
             <Select.Trigger placeholder="Select regional manager" />
@@ -99,7 +103,7 @@ export default function ManagerAssignmentTab({ branch, onUpdate }: ManagerAssign
             Branch Manager
           </Text>
           <Select.Root 
-            value={branch.manager?.id || ''}
+            value={(branch as any).manager?.id || ''}
             onValueChange={handleBranchManagerChange}
           >
             <Select.Trigger placeholder="Select branch manager" />

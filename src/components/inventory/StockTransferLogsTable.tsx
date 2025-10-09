@@ -1,87 +1,91 @@
+'use client';
+
 import React, { useState, useMemo } from 'react';
 import {
   Table,
-  Button,
-  Badge,
   Flex,
   Text
 } from '@radix-ui/themes';
-import { StockTransferLog } from '@/data/StockTransferLogData';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { inventoryService } from '@/lib/services';
 import { formatDate } from '@/utilities/index';
-import { getUserById } from '@/data/StockTransferLogData';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { getTransferStatusBadge } from '@/utilities/transferStatusBadge';
 import { SortableHeader } from '@/components/common/SortableHeader';
+import { StockTransferLog, SortConfig, SortableTransferLogField } from '@/types/inventory';
 
 interface StockTransferLogsTableProps {
   transferLogs: StockTransferLog[];
-  onViewDetails: (transferLog: StockTransferLog) => void;
+  onRowClick?: (log: StockTransferLog) => void;
+  onSort?: (field: SortableTransferLogField, direction: 'asc' | 'desc') => void;
 }
 
 const StockTransferLogsTable: React.FC<StockTransferLogsTableProps> = ({
-  transferLogs,
-  onViewDetails,
+  transferLogs = [],
+  onRowClick,
+  onSort
 }) => {
-  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig<StockTransferLog> | null>(null);
 
-  const handleSort = (key: string) => {
+  const handleSort = (key: SortableTransferLogField) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    onSort?.(key, direction);
   };
 
-  const sortedLogs = useMemo(() => {
+  const sortedTransferLogs = useMemo(() => {
     if (!sortConfig) return transferLogs;
 
     return [...transferLogs].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
+      const aValue = a[sortConfig.key];
+      const bValue = b[sortConfig.key];
 
-      switch (sortConfig.key) {
-        case 'transferNumber':
-          aValue = a.transferNumber;
-          bValue = b.transferNumber;
-          break;
-        case 'dateCreated':
-          aValue = new Date(a.dateCreated).getTime();
-          bValue = new Date(b.dateCreated).getTime();
-          break;
-        case 'origin':
-          aValue = organization.find(org => org.id === a.originId)?.name || '';
-          bValue = organization.find(org => org.id === b.originId)?.name || '';
-          break;
-        case 'destination':
-          aValue = organization.find(org => org.id === a.destinationId)?.name || '';
-          bValue = organization.find(org => org.id === b.destinationId)?.name || '';
-          break;
-        case 'status':
-          aValue = a.status;
-          bValue = b.status;
-          break;
-        case 'dateReceived':
-          aValue = a.dateReceived ? new Date(a.dateReceived).getTime() : 0;
-          bValue = b.dateReceived ? new Date(b.dateReceived).getTime() : 0;
-          break;
-        case 'discrepancies':
-          aValue = a.hasDiscrepancies ? 1 : 0;
-          bValue = b.hasDiscrepancies ? 1 : 0;
-          break;
-        default:
-          return 0;
+      // Handle string comparisons
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        const comparison = aValue.localeCompare(bValue);
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
 
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
+      // Handle date comparisons
+      if (sortConfig.key === 'dateCreated' || sortConfig.key === 'dateReceived') {
+        const aDate = new Date(aValue as string).getTime();
+        const bDate = new Date(bValue as string).getTime();
+        const comparison = aDate - bDate;
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
+
+      // Handle number comparisons
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        const comparison = aValue - bValue;
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
       }
+
+      // Handle boolean comparisons
+      if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
+        const comparison = Number(aValue) - Number(bValue);
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
+      }
+
       return 0;
     });
   }, [transferLogs, sortConfig]);
+
+  const handleRowClick = (log: StockTransferLog) => {
+    onRowClick?.(log);
+  };
+
+  if (transferLogs.length === 0) {
+    return (
+      <Flex direction="column" align="center" justify="center" gap="3" className="py-8">
+        <AlertTriangle className="h-8 w-8 text-gray-400" />
+        <Text size="3" color="gray">No transfer logs found</Text>
+        <Text size="2" color="gray">Transfer logs will appear here once stock transfers are created.</Text>
+      </Flex>
+    );
+  }
 
   return (
     <Table.Root variant="surface">
@@ -97,16 +101,8 @@ const StockTransferLogsTable: React.FC<StockTransferLogsTableProps> = ({
           </Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>
             <SortableHeader
-              label="Date Created"
-              sortKey="dateCreated"
-              currentSort={sortConfig}
-              onSort={handleSort}
-            />
-          </Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>
-            <SortableHeader
               label="Origin"
-              sortKey="origin"
+              sortKey="originId"
               currentSort={sortConfig}
               onSort={handleSort}
             />
@@ -114,7 +110,7 @@ const StockTransferLogsTable: React.FC<StockTransferLogsTableProps> = ({
           <Table.ColumnHeaderCell>
             <SortableHeader
               label="Destination"
-              sortKey="destination"
+              sortKey="destinationId"
               currentSort={sortConfig}
               onSort={handleSort}
             />
@@ -129,75 +125,62 @@ const StockTransferLogsTable: React.FC<StockTransferLogsTableProps> = ({
           </Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>
             <SortableHeader
-              label="Date Received"
-              sortKey="dateReceived"
+              label="Date Created"
+              sortKey="dateCreated"
               currentSort={sortConfig}
               onSort={handleSort}
             />
           </Table.ColumnHeaderCell>
           <Table.ColumnHeaderCell>
             <SortableHeader
-              label="Discrepancies"
-              sortKey="discrepancies"
+              label="Items"
+              sortKey="totalItems"
               currentSort={sortConfig}
               onSort={handleSort}
             />
           </Table.ColumnHeaderCell>
-          <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Discrepancies</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell></Table.ColumnHeaderCell>
         </Table.Row>
       </Table.Header>
-
       <Table.Body>
-        {sortedLogs.length === 0 ? (
-          <Table.Row>
-            <Table.Cell colSpan={10} align="center">No transfer logs found.</Table.Cell>
+        {sortedTransferLogs.map((log) => (
+          <Table.Row 
+            key={log.id} 
+            className="cursor-pointer hover:bg-gray-50"
+            onClick={() => handleRowClick(log)}
+          >
+            <Table.Cell>
+              <Text weight="medium">{log.transferNumber}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{log.originId}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{log.destinationId}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              {getTransferStatusBadge({ status: log.status })}
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{formatDate(new Date(log.dateCreated))}</Text>
+            </Table.Cell>
+            <Table.Cell>
+              <Text>{log.totalItems || 0} items</Text>
+            </Table.Cell>
+            <Table.Cell>
+              {log.hasDiscrepancies && (
+                <Flex align="center" gap="1">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  <Text size="2" color="orange">Yes</Text>
+                </Flex>
+              )}
+            </Table.Cell>
+            <Table.Cell>
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            </Table.Cell>
           </Table.Row>
-        ) : (
-          sortedLogs.map((log) => {
-            const origin = organization.find(org => org.id === log.originId)?.name || 'Unknown';
-            const destination = organization.find(org => org.id === log.destinationId)?.name || 'Unknown';
-            const creator = getUserById(log.createdBy)?.name || 'Unknown';
-            const approver = log.approvedBy ? getUserById(log.approvedBy)?.name || 'Unknown' : '-';
-            
-            return (
-              <Table.Row key={log.id} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800" onClick={() => onViewDetails(log)}>
-                <Table.RowHeaderCell>{log.transferNumber}</Table.RowHeaderCell>
-                
-                <Table.Cell>{formatDate(new Date(log.dateCreated))}</Table.Cell>
-                
-                <Table.Cell>{origin}</Table.Cell>
-                
-                <Table.Cell>{destination}</Table.Cell>
-                
-                <Table.Cell>
-                  {getTransferStatusBadge({ status: log.status })}
-                </Table.Cell>
-                
-                <Table.Cell>
-                  {log.dateReceived ? formatDate(new Date(log.dateReceived)) : '-'}
-                </Table.Cell>
-                
-                <Table.Cell>
-                  {log.hasDiscrepancies && (
-                    <Badge color="red" size="1">
-                      <Flex gap="1" align="center">
-                        <AlertTriangle size={12} />
-                        <Text size="1">Yes</Text>
-                      </Flex>
-                    </Badge>
-                  )}
-                </Table.Cell>
-                
-                <Table.Cell>
-                  <Button size="1" onClick={() => onViewDetails(log)}>
-                    View
-                    <ChevronRight size={14} />
-                  </Button>
-                </Table.Cell>
-              </Table.Row>
-            );
-          })
-        )}
+        ))}
       </Table.Body>
     </Table.Root>
   );

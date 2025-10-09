@@ -1,5 +1,6 @@
 import { supabase } from '../supabase/client';
 import type { Database } from '../supabase/database.types';
+import { auditService, AuditEventType } from './audit.service';
 
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 
@@ -56,30 +57,84 @@ export const authService = {
    * Sign in an existing user
    */
   signIn: async (params: SignInParams) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: params.email,
-      password: params.password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: params.email,
+        password: params.password,
+      });
 
-    if (error) throw error;
+      if (error) {
+        // Log failed login attempt
+        await auditService.logAuth(
+          AuditEventType.LOGIN_FAILED,
+          undefined,
+          params.email,
+          undefined, // IP will be added by middleware/client
+          false,
+          { error: error.message }
+        );
+        throw error;
+      }
 
-    // Update last login
-    if (data.user) {
-      await supabase
-        .from('user_profiles')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', data.user.id);
+      // Update last login
+      if (data.user) {
+        await supabase
+          .from('user_profiles')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', data.user.id);
+
+        // Log successful login
+        await auditService.logAuth(
+          AuditEventType.LOGIN_SUCCESS,
+          data.user.id,
+          params.email,
+          undefined, // IP will be added by middleware/client
+          true
+        );
+      }
+
+      return data;
+    } catch (error) {
+      // Ensure failed login is logged even if audit fails
+      if (!(error as any).message?.includes('audit')) {
+        await auditService.logAuth(
+          AuditEventType.LOGIN_FAILED,
+          undefined,
+          params.email,
+          undefined,
+          false,
+          { error: (error as any).message }
+        ).catch(() => {}); // Silent fail for audit
+      }
+      throw error;
     }
-
-    return data;
   },
 
   /**
    * Sign out the current user
    */
   signOut: async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      // Get current user before signing out
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      // Log successful logout
+      if (user) {
+        await auditService.logAuth(
+          AuditEventType.LOGOUT,
+          user.id,
+          user.email,
+          undefined,
+          true
+        );
+      }
+    } catch (error) {
+      console.error('Error during logout:', error);
+      throw error;
+    }
   },
 
   /**
@@ -136,10 +191,34 @@ export const authService = {
    * Reset password
    */
   resetPassword: async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
-    });
-    if (error) throw error;
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+      
+      if (error) throw error;
+
+      // Log password reset request
+      await auditService.logAuth(
+        AuditEventType.PASSWORD_RESET_REQUEST,
+        undefined,
+        email,
+        undefined,
+        true
+      );
+    } catch (error) {
+      // Log failed password reset request
+      await auditService.logAuth(
+        AuditEventType.PASSWORD_RESET_REQUEST,
+        undefined,
+        email,
+        undefined,
+        false,
+        { error: (error as any).message }
+      ).catch(() => {}); // Silent fail for audit
+      
+      throw error;
+    }
   },
 
   /**

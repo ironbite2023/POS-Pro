@@ -59,7 +59,7 @@ export default function MemberProfile({
       if (open && member) {
         setLoadingTransactions(true);
         try {
-          const data = await loyaltyService.getMemberTransactions(member.id, 50);
+          const data = await loyaltyService.getMemberTransactions(member.id);
           setTransactions(data);
         } catch (error) {
           console.error('Error fetching transactions:', error);
@@ -91,7 +91,7 @@ export default function MemberProfile({
       onUpdate();
 
       // Refresh transactions
-      const data = await loyaltyService.getMemberTransactions(member.id, 50);
+      const data = await loyaltyService.getMemberTransactions(member.id);
       setTransactions(data);
     } catch (error) {
       // Error handled in hook

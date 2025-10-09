@@ -1,4 +1,4 @@
-import { organization } from "@/data/CommonData";
+// Removed hardcoded organization import - utilities should be pure functions
 
 export const formatDate = (date: Date) => {
   return date.toLocaleDateString('en-US', {
@@ -30,7 +30,6 @@ export const formatCurrency = (
   }).format(amount);
 };
 
-
 export const formatNumberK = (number: number) => {
   return number > 1000 ? (number / 1000).toFixed(1) + 'K' : number;
 };
@@ -39,9 +38,7 @@ export const formatNumberThousand = (number: number) => {
   return number.toLocaleString('en-US');
 };
 
-export const getBranches = () => {
-  return organization.filter(entity => entity.id !== "hq");
-};
+// Removed getBranches() function - use useOrganization() hook instead
 
 
 export const getStrongPassword = () => {

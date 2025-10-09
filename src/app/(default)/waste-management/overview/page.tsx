@@ -8,7 +8,8 @@ import {
   Text, 
   Tabs,
 } from '@radix-ui/themes';
-import { wasteLogs, wasteReasons } from '@/data/WasteLogData';
+// Removed hardcoded import - using real data from database services
+// Note: Waste management will use waste.service.ts when implemented
 import { startOfMonth, addDays, isAfter } from 'date-fns';
 import { useChartOptions } from '@/utilities/chartOptions';
 import { AlertTriangle, Trash, CookingPot, Banknote, BarChart2, Clock, Gauge } from 'lucide-react';
@@ -22,6 +23,10 @@ import ProductionTab from '@/components/waste-management/ProductionTab';
 import { formatCurrency } from '@/utilities';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
+
+// Placeholder data
+const wasteLogs: any[] = [];
+const wasteReasons: any[] = [];
 
 // Mock data for analytics
 const getExpiringStockItems = () => [

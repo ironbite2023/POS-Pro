@@ -1,10 +1,18 @@
 import React from 'react';
 import { Box, Card, Flex, Heading, Text, Table } from '@radix-ui/themes';
-import { User } from '@/data/UserData';
+// Removed hardcoded import - using real user profiles from database
+import type { Database } from '@/lib/supabase/database.types';
+
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 import { format } from 'date-fns';
 
+interface ActivityLog {
+  timestamp: string;
+  action: string;
+}
+
 interface ActivityLogTabProps {
-  user: User;
+  user: UserProfile & { activityLog?: ActivityLog[] };
 }
 
 export default function ActivityLogTab({ user }: ActivityLogTabProps) {

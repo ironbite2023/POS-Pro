@@ -1,15 +1,38 @@
 import React from 'react';
 import { Box, Card, Flex, Select, Switch, Text } from '@radix-ui/themes';
-import { User } from '@/data/UserData';
-import { roles } from '@/data/UserData';
-import { mockBranches, regions } from '@/data/BranchData';
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect, useState } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
+type Role = Database['public']['Tables']['roles']['Row'];
+type Branch = Database['public']['Tables']['branches']['Row'];
+
+interface ExtendedUser extends UserProfile {
+  role?: string;
+  region?: string;
+  branches?: string[];
+  canViewOwnReports?: boolean;
+  canEditInventory?: boolean;
+}
 
 interface RolesAccessTabProps {
-  user: User;
-  onUpdate: (updates: Partial<User>) => void;
+  user: ExtendedUser;
+  onUpdate: (updates: Partial<ExtendedUser>) => void;
 }
 
 export default function RolesAccessTab({ user, onUpdate }: RolesAccessTabProps) {
+  const { branches: contextBranches } = useOrganization();
+  const [roles, setRoles] = useState<Role[]>([]);
+  
+  // Fetch roles
+  useEffect(() => {
+    // TODO: Load roles from database
+    setRoles([]);
+  }, []);
+  
+  const regions = Array.from(new Set(contextBranches.map(b => b.region)));
   // Handle role change
   const handleRoleChange = (value: string) => {
     onUpdate({ role: value });
@@ -22,9 +45,10 @@ export default function RolesAccessTab({ user, onUpdate }: RolesAccessTabProps) 
   
   // Handle branch selection
   const handleBranchToggle = (branchId: string) => {
-    const newBranches = user.branches.includes(branchId)
-      ? user.branches.filter(id => id !== branchId)
-      : [...user.branches, branchId];
+    const currentBranches = user.branches || [];
+    const newBranches = currentBranches.includes(branchId)
+      ? currentBranches.filter(id => id !== branchId)
+      : [...currentBranches, branchId];
     
     onUpdate({ branches: newBranches });
   };
@@ -90,11 +114,11 @@ export default function RolesAccessTab({ user, onUpdate }: RolesAccessTabProps) 
             </Text>
             <Box>
               <Flex direction="column" gap="4">
-                {mockBranches.map(branch => (
+                {contextBranches.map(branch => (
                   <Flex key={branch.id} align="center" gap="2">
                     <Switch 
                       color="green"
-                      checked={user.branches.includes(branch.id)}
+                      checked={(user.branches || []).includes(branch.id)}
                       onCheckedChange={() => handleBranchToggle(branch.id)}
                     />
                     <Text size="2">{branch.name}</Text>
@@ -115,7 +139,7 @@ export default function RolesAccessTab({ user, onUpdate }: RolesAccessTabProps) 
                 <Flex align="center" gap="2">
                   <Switch 
                     color="green"
-                    checked={user.canViewOwnReports}
+                    checked={user.canViewOwnReports || false}
                     onCheckedChange={(checked) => handlePermissionChange('canViewOwnReports', checked)}
                   />
                   <Flex direction="column">
@@ -129,7 +153,7 @@ export default function RolesAccessTab({ user, onUpdate }: RolesAccessTabProps) 
                 <Flex align="center" gap="2">
                   <Switch 
                     color="green"
-                    checked={user.canEditInventory}
+                    checked={user.canEditInventory || false}
                     onCheckedChange={(checked) => handlePermissionChange('canEditInventory', checked)}
                   />
                   <Flex direction="column">

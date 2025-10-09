@@ -13,7 +13,11 @@ import {
 import DateRangeInput from '@/components/common/DateRangeInput';
 import { Range } from 'react-date-range';
 import { useFilterBranch, FilterBranchProvider } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded import - using real organization from context
+// Placeholder data
+const menuItems: any[] = [];
+const ingredientItems: any[] = [];
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
 
@@ -23,12 +27,9 @@ import WastageDetailsReport from '@/components/waste-management/reports/WastageD
 import WastageCausesReport from '@/components/waste-management/reports/WastageCausesReport';
 import WastageCostReport from '@/components/waste-management/reports/WastageCostReport';
 
-// Import data sources
-import { menuItems } from '@/data/MenuData';
-import { ingredientItems } from '@/data/IngredientItemsData';
-
 function WastageReportsContent() {
   usePageTitle('Wastage Reports');
+  const { branches: orgBranches } = useOrganization();
   const [selectedReportType, setSelectedReportType] = useState('summary');
   const [dateRange, setDateRange] = useState<Range>({
     startDate: new Date(new Date().setDate(new Date().getDate() - 30)), // Last 30 days
@@ -83,7 +84,7 @@ function WastageReportsContent() {
     setSelectedBranch(null);
   };
 
-  const branches = organization.filter(org => org.id !== 'hq');
+  const branches = orgBranches.filter(b => b.id !== 'hq');
 
   // Mock wastage categories
   const wastageCategories = [

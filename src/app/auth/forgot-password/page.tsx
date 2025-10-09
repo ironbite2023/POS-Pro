@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { authService } from '@/lib/services';
 
 export default function ForgotPasswordPage() {
   usePageTitle('Forgot Password');
@@ -20,12 +21,14 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate password reset request
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use real Supabase password reset
+      await authService.resetPassword(email);
       setIsSubmitted(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Password reset request failed:', error);
+      // Show user-friendly error message
+      alert(error.message || 'Failed to send password reset email. Please try again.');
     } finally {
       setIsLoading(false);
     }

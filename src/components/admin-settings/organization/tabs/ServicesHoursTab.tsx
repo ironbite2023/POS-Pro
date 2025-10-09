@@ -1,6 +1,10 @@
 import React from 'react';
 import { Box, Card, Checkbox, Flex, Grid, Heading, Separator, Text, TextField } from '@radix-ui/themes';
-import { Branch } from '@/data/BranchData';
+// Removed hardcoded import - using real branch data from context
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
 import CardHeading from '@/components/common/CardHeading';
 
 interface ServicesHoursTabProps {
@@ -9,11 +13,21 @@ interface ServicesHoursTabProps {
 }
 
 export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabProps) {
+  // Parse services from JSON
+  const services = typeof branch.services === 'object' && branch.services !== null 
+    ? (branch.services as any) 
+    : { dineIn: false, takeaway: false, delivery: false };
+  
+  // Parse business hours from JSON  
+  const businessHours = typeof (branch as any).business_hours === 'object' && (branch as any).business_hours !== null
+    ? (branch as any).business_hours
+    : [];
+  
   // Update service status
   const handleServiceChange = (service: 'dineIn' | 'takeaway' | 'delivery', checked: boolean) => {
     onUpdate({
       services: {
-        ...branch.services,
+        ...services,
         [service]: checked
       }
     });
@@ -25,13 +39,13 @@ export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabP
     field: 'isOpen' | 'openTime' | 'closeTime', 
     value: boolean | string
   ) => {
-    const updatedHours = [...branch.businessHours];
+    const updatedHours = [...businessHours];
     updatedHours[index] = {
       ...updatedHours[index],
       [field]: value
     };
     
-    onUpdate({ businessHours: updatedHours });
+    (onUpdate as any)({ business_hours: updatedHours });
   };
   
   return (
@@ -46,7 +60,7 @@ export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabP
           <Text as="label" weight="medium">
             <Flex gap="2" align="center">
               <Checkbox 
-                checked={branch.services.dineIn}
+                checked={services.dineIn || false}
                 onCheckedChange={(checked) => 
                   handleServiceChange('dineIn', checked as boolean)
                 }
@@ -58,7 +72,7 @@ export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabP
           <Text as="label" weight="medium">
             <Flex gap="2" align="center">
               <Checkbox 
-                checked={branch.services.takeaway}
+                checked={services.takeaway || false}
                 onCheckedChange={(checked) => 
                   handleServiceChange('takeaway', checked as boolean)
                 }
@@ -70,7 +84,7 @@ export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabP
           <Text as="label" weight="medium">
             <Flex gap="2" align="center">
               <Checkbox 
-                checked={branch.services.delivery}
+                checked={services.delivery || false}
                 onCheckedChange={(checked) => 
                   handleServiceChange('delivery', checked as boolean)
                 }
@@ -83,7 +97,7 @@ export default function ServicesHoursTab({ branch, onUpdate }: ServicesHoursTabP
       <Card size="3">
         <CardHeading title="Business Hours" />
         
-        {branch.businessHours.map((hours, index) => (
+        {businessHours.map((hours: any, index: number) => (
           <Flex 
             key={hours.day} 
             direction={{ initial: "column", sm: "row" }}

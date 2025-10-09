@@ -1,7 +1,8 @@
 'use client';
 
 import SearchableSelect from '@/components/common/SearchableSelect';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded import - using real organization from context
 import {
   AlertDialog,
   Box,
@@ -133,6 +134,7 @@ const LoyaltyTierModal: React.FC<LoyaltyTierModalProps> = ({
 
 export default function LoyaltyProgramSettingsPage() {
   usePageTitle('Loyalty Program Settings');
+  const { branches } = useOrganization();
   const [branchEnablement, setBranchEnablement] = useState<'all' | 'specific'>('all');
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
 
@@ -276,7 +278,7 @@ export default function LoyaltyProgramSettingsPage() {
                   <Box mt="2">
                     <SearchableSelect
                       placeholder="Select Branches"
-                      options={organization.filter(o => o.id !== 'hq').map(branch => ({
+                      options={branches.filter(b => b.id !== 'hq').map(branch => ({
                         value: branch.id,
                         label: branch.name
                       }))}

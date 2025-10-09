@@ -1,7 +1,14 @@
 'use client';
 
 import React, { createContext, useState, useContext, ReactNode } from 'react';
-import { OrganizationEntity, organization } from '@/data/CommonData';
+// This context is deprecated - use OrganizationContext instead  
+// Keeping minimal implementation for backward compatibility
+import type { Database } from '@/lib/supabase/database.types';
+
+type Branch = Database['public']['Tables']['branches']['Row'];
+
+// Legacy interface for backward compatibility
+interface OrganizationEntity extends Branch {}
 
 interface FilterBranchContextType {
   activeBranchFilter: OrganizationEntity | null;

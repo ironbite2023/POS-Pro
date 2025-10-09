@@ -1,4 +1,9 @@
 import React, { useState } from 'react';
+
+// Common units of measure for recipes
+const unitOfMeasures = [
+  'g', 'kg', 'ml', 'l', 'cup', 'tbsp', 'tsp', 'oz', 'lb', 'piece', 'slice', 'pinch', 'dash'
+];
 import { 
   Box, 
   Table, 
@@ -13,10 +18,15 @@ import {
 } from '@radix-ui/themes';
 import { Trash2, Plus, X, Save } from 'lucide-react';
 import { RecipeIngredient, UnitOfMeasure, Recipe, IngredientItem } from '@/types/inventory';
-import { unitOfMeasures } from '@/data/CommonData';
-import { ingredientItems } from '@/data/IngredientItemsData';
+import type { Database } from '@/lib/supabase/database.types';
+
+type InventoryItem = Database['public']['Tables']['inventory_items']['Row'];
+// Removed hardcoded imports - using real data from database services
+import { inventoryService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import SearchableSelect from '@/components/common/SearchableSelect';
-import { mockStockItems } from '@/data/StockItemData';
+import { useEffect } from 'react';
+// Removed hardcoded stock items - using real inventory from database
 
 interface RecipeIngredientsProps {
   recipe: Recipe;
@@ -29,8 +39,27 @@ const RecipeIngredients: React.FC<RecipeIngredientsProps> = ({
   updateIngredients,
   isEditing
 }) => {
+  const { currentOrganization } = useOrganization();
+  const [ingredientItems, setIngredientItems] = useState<InventoryItem[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [ingradientItem, setIngredientItem] = useState<IngredientItem | null>(null);
+  const [ingradientItem, setIngredientItem] = useState<InventoryItem | null>(null);
+
+  // Load ingredient items from database
+  useEffect(() => {
+    const loadIngredientItems = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const items = await inventoryService.getItems(currentOrganization.id);
+        setIngredientItems(items);
+      } catch (error) {
+        console.error('Error loading ingredient items:', error);
+        setIngredientItems([]);
+      }
+    };
+
+    loadIngredientItems();
+  }, [currentOrganization]);
   const [newIngredient, setNewIngredient] = useState<Partial<RecipeIngredient>>({
     name: '',
     amount: 0,
@@ -293,7 +322,7 @@ const RecipeIngredients: React.FC<RecipeIngredientsProps> = ({
               </TextField.Root>
             </Grid>
             <Text size="2" mt="2">
-              Available Stock: {mockStockItems.find(item => item.id === ingradientItem?.id)?.quantity} {mockStockItems.find(item => item.id === ingradientItem?.id)?.storageUnit}
+              Available Stock: {/* TODO: Implement stock quantity lookup from branch inventory */}N/A
             </Text>
             <Text size="2" mt="2">
               Total Cost: ${(newIngredient.totalCost || 0).toFixed(2)}

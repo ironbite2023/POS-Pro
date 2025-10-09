@@ -3,7 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { Box } from '@radix-ui/themes';
 import PurchaseOrderForm from '@/components/purchasing/purchase-order/PurchaseOrderForm';
-import { PurchaseOrder } from '@/data/PurchaseOrderData';
+// Removed hardcoded import - using real data from database services
+import type { Database } from '@/lib/supabase/database.types';
+
+type PurchaseOrder = Database['public']['Tables']['purchase_orders']['Row'];
 import { toast } from 'sonner';
 import { usePageTitle } from '@/hooks/usePageTitle';
 

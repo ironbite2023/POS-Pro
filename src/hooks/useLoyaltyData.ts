@@ -75,7 +75,7 @@ export const useLoyaltyData = (): UseLoyaltyDataReturn => {
       // Get transactions from all members
       const allTransactions: LoyaltyTransaction[] = [];
       for (const member of members) {
-        const memberTransactions = await loyaltyService.getMemberTransactions(member.id, 100);
+        const memberTransactions = await loyaltyService.getMemberTransactions(member.id);
         allTransactions.push(...memberTransactions);
       }
       setTransactions(allTransactions);

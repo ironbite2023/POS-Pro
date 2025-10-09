@@ -1,56 +1,156 @@
 import { Box, Button, Flex, Table, Text, Badge, TextField, Select, IconButton } from '@radix-ui/themes';
 import { Search, AlertCircle, RefreshCcw, Utensils, Edit, Trash2 } from 'lucide-react';
-import { MenuItem, menuCategories } from '@/data/MenuData';
-import { organization } from '@/data/CommonData';
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { menuService } from '@/lib/services';
+import type { Database } from '@/lib/supabase/database.types';
+import { useMemo, useState, useEffect } from 'react';
+import Link from 'next/link';
 import Image from 'next/image';
 import Pagination from '@/components/common/Pagination';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { SortableHeader } from '@/components/common/SortableHeader';
-import { useState } from 'react';
-import Link from 'next/link';
+
+type MenuItem = Database['public']['Tables']['menu_items']['Row'];
+type MenuCategory = Database['public']['Tables']['menu_categories']['Row'];
+
+// Temporary workaround: Since availableBranchesIds doesn't exist in the database schema,
+// we'll create an extended type that includes this property for frontend functionality
+type MenuItemWithAvailability = MenuItem & {
+  availableBranchesIds?: string[];
+};
 
 interface MenuListProps {
-  searchTerm: string;
-  onSearchChange: (value: string) => void;
-  filteredMenuItems: MenuItem[];
-  onEditItem: (item: MenuItem) => void;
-  onDeleteItem: (item: MenuItem) => void;
+  items: MenuItem[];
+  categories: MenuCategory[];
+  availableBranches: { id: string; name: string }[];
+  searchTerm?: string;
   categoryFilter?: string;
   statusFilter?: string;
   availabilityFilter?: string;
-  onCategoryFilterChange?: (value: string) => void;
-  onStatusFilterChange?: (value: string) => void;
-  onAvailabilityFilterChange?: (value: string) => void;
+  onEdit?: (item: MenuItem) => void;
+  onDelete?: (item: MenuItem) => void;
+  onSearchChange?: (searchTerm: string) => void;
+  onCategoryFilterChange?: (category: string) => void;
+  onStatusFilterChange?: (status: string) => void;
+  onAvailabilityFilterChange?: (availability: string) => void;
   onResetFilters?: () => void;
 }
 
-export default function MenuList({
-  searchTerm,
-  onSearchChange,
-  filteredMenuItems,
-  onEditItem,
-  onDeleteItem,
+export function MenuList({
+  items = [],
+  categories = [],
+  availableBranches = [],
+  searchTerm = '',
   categoryFilter = 'all',
   statusFilter = 'all',
   availabilityFilter = 'all',
+  onEdit = () => {},
+  onDelete = () => {},
+  onSearchChange = () => {},
   onCategoryFilterChange = () => {},
   onStatusFilterChange = () => {},
   onAvailabilityFilterChange = () => {},
   onResetFilters = () => {},
 }: MenuListProps) {
+  const { currentOrganization } = useOrganization();
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<MenuItem | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  const availableBranches = organization.filter(b => b.id !== "hq");
+  const [loadedCategories, setLoadedCategories] = useState<MenuCategory[]>([]);
+
+  // Load categories from database
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const dbCategories = await menuService.getCategories(currentOrganization.id);
+        setLoadedCategories(dbCategories);
+      } catch (error) {
+        console.error('Error loading menu categories:', error);
+      }
+    };
+
+    loadCategories();
+  }, [currentOrganization]);
+  // Note: Branch filtering will be handled by parent component with real branch data
+
+  // Helper function to add availability data to menu items
+  const addAvailabilityData = (item: MenuItem): MenuItemWithAvailability => {
+    // Temporary: Assume all active items are available to all branches
+    // TODO: Implement proper branch-menu item relationship in database
+    return {
+      ...item,
+      availableBranchesIds: item.is_active ? availableBranches.map(b => b.id) : []
+    };
+  };
+
+  // Convert items to include availability data
+  const itemsWithAvailability = items.map(addAvailabilityData);
+
+  const filteredItems = useMemo(() => {
+    return itemsWithAvailability.filter(item => {
+      const matchesSearch = !searchTerm || 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.description?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesCategory = categoryFilter === 'all' || 
+        item.category_id === categoryFilter;
+
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'active' && item.is_active) ||
+        (statusFilter === 'inactive' && !item.is_active);
+
+      const matchesAvailability = availabilityFilter === 'all' ||
+        (availabilityFilter === 'available' && (item.availableBranchesIds?.length || 0) > 0) ||
+        (availabilityFilter === 'unavailable' && (item.availableBranchesIds?.length || 0) === 0);
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesAvailability;
+    });
+  }, [itemsWithAvailability, searchTerm, categoryFilter, statusFilter, availabilityFilter]);
+
+  const sortedItems = useMemo(() => {
+    if (!sortConfig) return filteredItems;
+
+    return [...filteredItems].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      if (sortConfig.key === 'name') {
+        aValue = a.name;
+        bValue = b.name;
+      } else if (sortConfig.key === 'category') {
+        const categoryA = (categories.length > 0 ? categories : loadedCategories).find(cat => cat.id === a.category_id)?.name || '';
+        const categoryB = (categories.length > 0 ? categories : loadedCategories).find(cat => cat.id === b.category_id)?.name || '';
+        aValue = categoryA;
+        bValue = categoryB;
+      } else if (sortConfig.key === 'price') {
+        aValue = a.base_price;
+        bValue = b.base_price;
+      } else if (sortConfig.key === 'availableBranchesIds') {
+        aValue = a.availableBranchesIds?.length || 0;
+        bValue = b.availableBranchesIds?.length || 0;
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  }, [filteredItems, sortConfig, categories, loadedCategories]);
 
   // Calculate pagination values
-  const totalItems = filteredMenuItems.length;
+  const totalItems = filteredItems.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentItems = filteredMenuItems.slice(startIndex, endIndex);
+  const currentItems = sortedItems.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -77,35 +177,11 @@ export default function MenuList({
 
   const handleConfirmDelete = () => {
     if (itemToDelete) {
-      onDeleteItem(itemToDelete);
+      onDelete(itemToDelete);
       setItemToDelete(null);
     }
     setDeleteConfirmOpen(false);
   };
-
-  // Sort items based on sortConfig
-  const sortedItems = [...currentItems].sort((a, b) => {
-    if (!sortConfig) return 0;
-
-    let aValue = a[sortConfig.key as keyof MenuItem];
-    let bValue = b[sortConfig.key as keyof MenuItem];
-
-    if (sortConfig.key === 'price') {
-      aValue = a.price;
-      bValue = b.price;
-    } else if (sortConfig.key === 'availableBranchesIds') {
-      aValue = a.availableBranchesIds.length;
-      bValue = b.availableBranchesIds.length;
-    }
-
-    if (aValue < bValue) {
-      return sortConfig.direction === 'asc' ? -1 : 1;
-    }
-    if (aValue > bValue) {
-      return sortConfig.direction === 'asc' ? 1 : -1;
-    }
-    return 0;
-  });
 
   return (
     <Box className="mt-6 space-y-4">
@@ -128,7 +204,7 @@ export default function MenuList({
             <Select.Trigger placeholder="All Categories" />
             <Select.Content>
               <Select.Item value="all">All Categories</Select.Item>
-              {menuCategories.map(category => (
+              {categories.map(category => (
                 <Select.Item key={category.id} value={category.id}>{category.name}</Select.Item>
               ))}
             </Select.Content>
@@ -225,13 +301,13 @@ export default function MenuList({
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {sortedItems.map((item) => (
-            <Table.Row key={item.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-neutral-800" onClick={() => onEditItem(item)}>
+          {currentItems.map((item) => (
+            <Table.Row key={item.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-neutral-800" onClick={() => onEdit(item)}>
               <Table.Cell>
                 <Flex align="center" gap="2">
-                  {item.imageUrl ? (
+                  {item.image_url ? (
                     <Image
-                      src={item.imageUrl} 
+                      src={item.image_url} 
                       alt={item.name} 
                       width={32} 
                       height={32}
@@ -242,21 +318,22 @@ export default function MenuList({
                       <Utensils size={12} className="text-gray-500 dark:text-gray-300" />
                     </Flex>
                   )}
-                  {item.stockWarning && <AlertCircle size={16} className="text-amber-500" />}
+                  {(item as any).stockWarning && <AlertCircle size={16} className="text-amber-500" />}
                   {item.name}
                 </Flex>
               </Table.Cell>
               <Table.Cell>
-                {menuCategories.find(cat => cat.id === item.category)?.name}
+                {categories.find(cat => cat.id === item.category_id)?.name || 'No Category'}
               </Table.Cell>
-              <Table.Cell align="right">${item.price.toFixed(2)}</Table.Cell>
+              <Table.Cell align="right">${item.base_price?.toFixed(2) || '0.00'}</Table.Cell>
               <Table.Cell>
-                <Badge color={item.isActive ? 'green' : 'gray'} variant="soft">
-                  {item.isActive ? 'Active' : 'Inactive'}
+                                  <Badge color={item.is_active ? 'green' : 'gray'} variant="soft">
+                    {item.is_active ? 'Active' : 'Inactive'}
                 </Badge>
               </Table.Cell>
               <Table.Cell>
-                {item.availableBranchesIds.length === 0 ? (
+                {/* Temporary: Show availability based on active status until proper branch relationship is implemented */}
+                {!item.availableBranchesIds || item.availableBranchesIds.length === 0 ? (
                   <Badge color="red" variant="soft">Not Available</Badge>
                 ) : item.availableBranchesIds.length === availableBranches.length ? (
                   <Badge color="green" variant="soft">All Branches</Badge>
@@ -267,7 +344,7 @@ export default function MenuList({
                 )}
               </Table.Cell>
               <Table.Cell>
-                {item.isSeasonal ? (
+                {item.is_seasonal ? (
                   <Text>Yes</Text>
                 ) : (
                   <Text>No</Text>
@@ -299,7 +376,7 @@ export default function MenuList({
         </Table.Body>
       </Table.Root>
       
-      {filteredMenuItems.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <Box className="py-8 text-center">
           <Text size="3" color="gray">No menu items found matching your search criteria.</Text>
         </Box>

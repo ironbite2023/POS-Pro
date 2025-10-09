@@ -15,6 +15,7 @@ import {
 import { Search, Plus } from 'lucide-react';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useMenuData } from '@/hooks/useMenuData';
+import { useTaxRate } from '@/hooks/useTaxRate';
 import { useOrderCartStore } from '@/stores/orderCartStore';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import OrderCart from '@/components/pos/OrderCart';
@@ -25,6 +26,7 @@ export default function OrderEntryPage() {
   const { categories, menuItems, loading } = useMenuData();
   const { currentBranch } = useOrganization();
   const cartStore = useOrderCartStore();
+  const { taxRate: _taxRate } = useTaxRate(); // Automatically manage tax rate (prefixed to indicate future use)
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 

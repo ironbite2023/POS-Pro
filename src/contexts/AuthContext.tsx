@@ -12,6 +12,8 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   session: Session | null;
   loading: boolean;
+  sessionTimeLeft: number | null; // Time left in seconds before session expires
+  isSessionExpiring: boolean; // True when session is about to expire (< 5 minutes)
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (params: {
     email: string;
@@ -26,6 +28,8 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshSession: () => Promise<void>;
+  extendSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,6 +51,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionTimeLeft, setSessionTimeLeft] = useState<number | null>(null);
+  const [isSessionExpiring, setIsSessionExpiring] = useState(false);
 
   // Load user profile
   const loadUserProfile = useCallback(async (userId: string) => {
@@ -102,6 +108,75 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       subscription.unsubscribe();
     };
   }, [loadUserProfile]);
+
+  // Session timeout management
+  useEffect(() => {
+    let timeoutInterval: NodeJS.Timeout;
+
+    if (session && session.expires_at) {
+      timeoutInterval = setInterval(() => {
+        const now = Math.floor(Date.now() / 1000);
+        const expiresAt = session.expires_at!;
+        const timeLeft = expiresAt - now;
+
+        setSessionTimeLeft(timeLeft);
+        
+        // Check if session is expiring (less than 5 minutes)
+        const isExpiring = timeLeft <= 300 && timeLeft > 0;
+        setIsSessionExpiring(isExpiring);
+
+        // Auto-refresh if session is about to expire (less than 2 minutes)
+        if (timeLeft <= 120 && timeLeft > 60) {
+          console.log('Auto-refreshing session...');
+          refreshSession().catch(console.error);
+        }
+
+        // Force logout if session has expired
+        if (timeLeft <= 0) {
+          console.log('Session expired, logging out...');
+          signOut().catch(console.error);
+        }
+      }, 30000); // Check every 30 seconds
+    }
+
+                       return () => {
+          if (timeoutInterval) {
+            clearInterval(timeoutInterval);
+          }
+        };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [session]);
+
+  // Refresh session function
+  const refreshSession = useCallback(async () => {
+    try {
+      const currentSession = await authService.getSession();
+      
+      if (currentSession) {
+        setSession(currentSession);
+        console.log('Session refreshed successfully');
+      }
+    } catch (error) {
+      console.error('Failed to refresh session:', error);
+    }
+  }, []);
+
+  // Extend session function (manual refresh)
+  const extendSession = useCallback(async () => {
+    try {
+      const session = await authService.getSession();
+      if (!session) throw new Error('No session found');
+      
+      if (session) {
+        setSession(session);
+        setIsSessionExpiring(false);
+        console.log('Session extended successfully');
+      }
+    } catch (error) {
+      console.error('Failed to extend session:', error);
+      throw error;
+    }
+  }, []);
 
   // Sign in
   const signIn = useCallback(async (email: string, password: string) => {
@@ -205,12 +280,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userProfile,
     session,
     loading,
+    sessionTimeLeft,
+    isSessionExpiring,
     signIn,
     signUp,
     signOut,
     resetPassword,
     updatePassword,
     refreshProfile,
+    refreshSession,
+    extendSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -4,8 +4,15 @@ import React, { useState } from 'react';
 import { Box, Button, Card, Flex, Heading, Select, Switch, Text, TextField } from '@radix-ui/themes';
 import { ArrowLeft, Save, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { roles } from '@/data/UserData';
-import { mockBranches, regions } from '@/data/BranchData';
+// Removed hardcoded imports - using real data from database services
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useEffect } from 'react';
+import type { Database } from '@/lib/supabase/database.types';
+
+type Role = Database['public']['Tables']['roles']['Row'];
+type Branch = Database['public']['Tables']['branches']['Row'];
+
+const regions = ['North', 'South', 'East', 'West', 'Central', 'Downtown', 'Suburban'];
 import { PageHeading } from '@/components/common/PageHeading';
 import { toast } from 'sonner';
 import { getStrongPassword } from '@/utilities';
@@ -23,6 +30,8 @@ interface UserInviteFormData {
 }
 
 export default function UserInviteForm() {
+  const { branches: contextBranches } = useOrganization();
+  const [roles, setRoles] = useState<Role[]>([]);
   const [formData, setFormData] = useState<UserInviteFormData>({
     email: '',
     firstName: '',
@@ -185,7 +194,7 @@ export default function UserInviteForm() {
                 <Text as="div" size="2" weight="medium" mb="2">Assign to Branch(es)</Text>
                 <Box className="max-h-[300px] overflow-y-auto">
                   <Flex direction="column" gap="4">
-                    {mockBranches.map(branch => (
+                    {contextBranches.map(branch => (
                       <Text as="label" size="2" key={branch.id}>
                         <Flex align="center" gap="2">
                           <Switch 

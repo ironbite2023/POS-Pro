@@ -29,6 +29,7 @@ interface OrderCartState {
   };
   orderType: OrderType;
   branchId?: string;
+  taxRate: number;
   
   // Actions
   addItem: (menuItem: MenuItem, quantity?: number) => void;
@@ -38,6 +39,7 @@ interface OrderCartState {
   setCustomerInfo: (info: Partial<OrderCartState['customerInfo']>) => void;
   setOrderType: (type: OrderType) => void;
   setBranch: (branchId: string) => void;
+  setTaxRate: (rate: number) => void;
   clearCart: () => void;
   
   // Computed
@@ -54,6 +56,7 @@ export const useOrderCartStore = create<OrderCartState>()(
       customerInfo: {},
       orderType: 'dine_in',
       branchId: undefined,
+      taxRate: 0.1, // Default 10% tax rate
 
       addItem: (menuItem: MenuItem, quantity = 1) => {
         const existingItemIndex = get().items.findIndex(
@@ -130,14 +133,26 @@ export const useOrderCartStore = create<OrderCartState>()(
         }));
       },
 
-      setOrderType: (orderType: OrderType) => set({ orderType }),
-      setBranch: (branchId: string) => set({ branchId }),
+      setOrderType: (type: OrderType) => {
+        set({ orderType: type });
+      },
 
-      clearCart: () => set({
-        items: [],
-        customerInfo: {},
-        orderType: 'dine_in',
-      }),
+      setBranch: (branchId: string) => {
+        set({ branchId });
+      },
+
+      setTaxRate: (rate: number) => {
+        set({ taxRate: rate });
+      },
+
+      clearCart: () => {
+        set({
+          items: [],
+          customerInfo: {},
+          orderType: 'dine_in',
+          taxRate: 0.1, // Reset to default tax rate
+        });
+      },
 
       getTotalItems: () => {
         return get().items.reduce((total, item) => total + item.quantity, 0);
@@ -149,20 +164,24 @@ export const useOrderCartStore = create<OrderCartState>()(
 
       getTax: () => {
         const subtotal = get().getSubtotal();
-        return subtotal * 0.1; // 10% tax rate (configurable)
+        const taxRate = get().taxRate;
+        return subtotal * taxRate;
       },
 
       getTotal: () => {
-        return get().getSubtotal() + get().getTax();
-      },
+        const subtotal = get().getSubtotal();
+        const tax = get().getTax();
+        return subtotal + tax;
+      }
     }),
     {
-      name: 'order-cart-storage',
+      name: 'order-cart-store',
       partialize: (state) => ({ 
         items: state.items,
         customerInfo: state.customerInfo,
         orderType: state.orderType,
         branchId: state.branchId,
+        taxRate: state.taxRate,
       }),
     }
   )

@@ -74,10 +74,7 @@ export default function CategoryForm({
         await menuService.updateCategory(category.id, data);
         toast.success('Category updated successfully');
       } else {
-        await menuService.createCategory({
-          ...data,
-          organization_id: currentOrganization.id,
-        });
+        await menuService.createCategory(currentOrganization.id, data);
         toast.success('Category created successfully');
       }
       

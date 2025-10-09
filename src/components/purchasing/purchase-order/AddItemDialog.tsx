@@ -2,11 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { Dialog, TextField, Button, Flex, Grid, Text, Box, IconButton } from '@radix-ui/themes';
-import { PurchaseOrderItem } from '@/data/PurchaseOrderData';
+// Removed hardcoded import - using real data from database services
+import type { Database } from '@/lib/supabase/database.types';
+
+type PurchaseOrderItem = Database['public']['Tables']['purchase_order_items']['Row'];
 import { v4 as uuidv4 } from 'uuid';
 import SearchableSelect from '@/components/common/SearchableSelect';
-import { mockStockItems } from '@/data/StockItemData';
-import { Save, X } from 'lucide-react';
+// Removed hardcoded import - using real inventory items from database
+import { inventoryService } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { X, Plus, Save } from 'lucide-react';
+
+type InventoryItem = Database['public']['Tables']['inventory_items']['Row'];
 
 interface AddItemDialogProps {
   open: boolean;
@@ -22,15 +29,34 @@ export default function AddItemDialog({
   initialItem = null
 }: AddItemDialogProps) {
   const [item, setItem] = useState<Partial<PurchaseOrderItem>>({
-    itemName: '',
-    quantityOrdered: 1,
-    unitPrice: 0,
-    receivedQuantity: 0,
-    stockLocation: ''
+    inventory_item_id: '',
+    quantity_ordered: 1,
+    unit_cost: 0,
+    quantity_received: 0,
+    line_total: 0
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [itemOptions, setItemOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const { currentOrganization } = useOrganization();
+  
+  // Load inventory items
+  useEffect(() => {
+    const loadInventoryItems = async () => {
+      if (!currentOrganization) return;
+      
+      try {
+        const items = await inventoryService.getItems(currentOrganization.id);
+        setInventoryItems(items);
+      } catch (error) {
+        console.error('Error loading inventory items:', error);
+        setInventoryItems([]);
+      }
+    };
+
+    loadInventoryItems();
+  }, [currentOrganization]);
   
   // Reset form when dialog opens
   useEffect(() => {
@@ -41,11 +67,11 @@ export default function AddItemDialog({
       } else {
         // Otherwise reset to default values
         setItem({
-          itemName: '',
-          quantityOrdered: 1,
-          unitPrice: 0,
-          receivedQuantity: 0,
-          stockLocation: ''
+          inventory_item_id: '',
+          quantity_ordered: 1,
+          unit_cost: 0,
+          quantity_received: 0,
+          line_total: 0
         });
       }
       setErrors({});
@@ -53,27 +79,27 @@ export default function AddItemDialog({
   }, [open, initialItem]);
 
   useEffect(() => {
-    // Convert stock items to options for searchable select
-    const options = mockStockItems.map(stockItem => ({
-      value: stockItem.id,
-      label: `${stockItem.name} (${stockItem.sku})`
+    // Convert inventory items to options for searchable select
+    const options = inventoryItems.map(item => ({
+      value: item.id,
+      label: `${item.name} (${item.sku || 'No SKU'})`
     }));
     setItemOptions(options);
-  }, []);
+  }, [inventoryItems]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    if (!item.itemName?.trim()) {
-      newErrors.itemName = 'Item name is required';
+    if (!item.inventory_item_id?.trim()) {
+      newErrors.inventory_item_id = 'Item is required';
     }
     
-    if (!item.quantityOrdered || item.quantityOrdered <= 0) {
-      newErrors.quantityOrdered = 'Quantity must be greater than 0';
+    if (!item.quantity_ordered || item.quantity_ordered <= 0) {
+      newErrors.quantity_ordered = 'Quantity must be greater than 0';
     }
     
-    if (!item.unitPrice || item.unitPrice <= 0) {
-      newErrors.unitPrice = 'Unit price must be greater than 0';
+    if (!item.unit_cost || item.unit_cost <= 0) {
+      newErrors.unit_cost = 'Unit cost must be greater than 0';
     }
     
     setErrors(newErrors);
@@ -84,12 +110,15 @@ export default function AddItemDialog({
     if (validateForm()) {
       const itemToSubmit: PurchaseOrderItem = {
         id: initialItem ? initialItem.id : uuidv4(),
-        itemName: item.itemName || '',
-        quantityOrdered: item.quantityOrdered || 0,
-        unitPrice: item.unitPrice || 0,
-        receivedQuantity: initialItem ? initialItem.receivedQuantity : 0,
-        stockLocation: initialItem ? initialItem.stockLocation : '',
-      };
+        inventory_item_id: item.inventory_item_id || '',
+        quantity_ordered: item.quantity_ordered || 0,
+        unit_cost: item.unit_cost || 0,
+        quantity_received: item.quantity_received || 0,
+        line_total: (item.quantity_ordered || 0) * (item.unit_cost || 0),
+        organization_id: '', // TODO: Set from context
+        purchase_order_id: '', // TODO: Set from parent
+        created_at: new Date().toISOString()
+      } as any; // Type assertion needed due to missing required fields
       
       onAddItem(itemToSubmit);
       
@@ -101,32 +130,26 @@ export default function AddItemDialog({
   // Handle item selection and auto-populate fields when an item is selected
   const handleItemSelect = (itemId: string | null) => {
     if (itemId) {
-      const selectedStockItem = mockStockItems.find(i => i.id === itemId);
-      if (selectedStockItem) {
+      const selectedItem = inventoryItems.find(i => i.id === itemId);
+      if (selectedItem) {
         setItem({
           ...item,
-          itemName: selectedStockItem.name,
-          // You might want to auto-populate the unit price if available in your data
-          // unitPrice: selectedStockItem.unitPrice || 0
+          inventory_item_id: selectedItem.id,
+          // Auto-populate the unit cost if available
+          unit_cost: selectedItem.cost_per_unit || 0
         });
       }
     } else {
       setItem({
         ...item,
-        itemName: ''
+        inventory_item_id: ''
       });
     }
   };
 
-  // Find the current item ID from the name to display in the SearchableSelect
+  // Find the current item ID to display in the SearchableSelect
   const getCurrentItemId = () => {
-    if (!item.itemName) return null;
-    
-    const option = itemOptions.find(opt => 
-      opt.label.toLowerCase().includes(item.itemName.toLowerCase())
-    );
-    
-    return option?.value || null;
+    return item.inventory_item_id || null;
   };
 
   return (
@@ -153,8 +176,8 @@ export default function AddItemDialog({
                 value={getCurrentItemId()}
               />
             </div>
-            {errors.itemName && (
-              <Text size="1" color="red">{errors.itemName}</Text>
+            {errors.inventory_item_id && (
+              <Text size="1" color="red">{errors.inventory_item_id}</Text>
             )}
           </Flex>
           
@@ -165,12 +188,12 @@ export default function AddItemDialog({
                 type="number"
                 min="1"
                 placeholder="Enter quantity"
-                value={item.quantityOrdered?.toString()}
-                onChange={(e) => setItem({ ...item, quantityOrdered: parseInt(e.target.value) || 0 })}
-                color={errors.quantityOrdered ? 'red' : undefined}
+                value={item.quantity_ordered?.toString()}
+                onChange={(e) => setItem({ ...item, quantity_ordered: parseInt(e.target.value) || 0 })}
+                color={errors.quantity_ordered ? 'red' : undefined}
               />
-              {errors.quantityOrdered && (
-                <Text size="1" color="red">{errors.quantityOrdered}</Text>
+              {errors.quantity_ordered && (
+                <Text size="1" color="red">{errors.quantity_ordered}</Text>
               )}
             </Flex>
             
@@ -181,16 +204,16 @@ export default function AddItemDialog({
                 min="0.01"
                 step="0.01"
                 placeholder="0.00"
-                value={item.unitPrice?.toString()}
-                onChange={(e) => setItem({ ...item, unitPrice: parseFloat(e.target.value) || 0 })}
-                color={errors.unitPrice ? 'red' : undefined}
+                value={item.unit_cost?.toString()}
+                onChange={(e) => setItem({ ...item, unit_cost: parseFloat(e.target.value) || 0 })}
+                color={errors.unit_cost ? 'red' : undefined}
               >
                 <TextField.Slot>
                   $
                 </TextField.Slot>
               </TextField.Root>
-              {errors.unitPrice && (
-                <Text size="1" color="red">{errors.unitPrice}</Text>
+              {errors.unit_cost && (
+                <Text size="1" color="red">{errors.unit_cost}</Text>
               )}
             </Flex>
           </Grid>

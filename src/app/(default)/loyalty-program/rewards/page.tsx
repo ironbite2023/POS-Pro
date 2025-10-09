@@ -16,10 +16,12 @@ import {
   Callout,
 } from "@radix-ui/themes";
 import { Search, Plus, ImageIcon, RefreshCcw, Edit, Trash2, Info } from "lucide-react";
-import { mockLoyaltyRewards } from '@/data/LoyaltyRewardsData';
-import { RewardStatus } from '@/types/loyalty';
-import { organization } from '@/data/CommonData';
-import { membershipTiers } from '@/data/LoyaltyData';
+// Removed hardcoded imports - using real data from database services
+import { loyaltyService } from '@/lib/services';
+
+// Placeholder types - will be replaced with proper database types
+type LoyaltyReward = any;
+type LoyaltyTier = any;
 import format from 'date-fns/format';
 import Pagination from '@/components/common/Pagination';
 import { useRouter } from 'next/navigation';
@@ -27,8 +29,7 @@ import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { SortableHeader } from '@/components/common/SortableHeader';
 import { useOrganization } from '@/contexts/OrganizationContext';
-
-const branches = organization.filter(org => org.id !== 'hq');
+import { useEffect } from 'react';
 
 const formatDateRange = (start?: Date, end?: Date): string => {
   if (!start && !end) return "Always Active";
@@ -40,7 +41,7 @@ const formatDateRange = (start?: Date, end?: Date): string => {
   return `${startDate} - ${endDate}`;
 };
 
-const formatBranchScope = (scope: 'All' | string[]): string => {
+const formatBranchScope = (scope: 'All' | string[], branches: any[]): string => {
   if (scope === 'All') return "All Branches";
   if (Array.isArray(scope)) {
     if (scope.length === 0) return "No Branches";
@@ -53,20 +54,22 @@ const formatBranchScope = (scope: 'All' | string[]): string => {
   return "Unknown";
 };
 
-const getStatusColor = (status: RewardStatus): React.ComponentProps<typeof Badge>['color'] => {
-  switch (status) {
-    case 'Active': return 'green';
-    case 'Inactive': return 'orange';
-    case 'Expired': return 'gray';
-    case 'Draft': return 'blue';
-    default: return 'gray';
-  }
+const getStatusColor = (isActive: boolean, validUntil?: string | null): React.ComponentProps<typeof Badge>['color'] => {
+  if (!isActive) return 'gray';
+  if (validUntil && new Date(validUntil) < new Date()) return 'orange'; // Expired
+  return 'green'; // Active
+};
+
+const _getStatusText = (isActive: boolean, validUntil?: string | null): string => {
+  if (!isActive) return 'Inactive';
+  if (validUntil && new Date(validUntil) < new Date()) return 'Expired';
+  return 'Active';
 };
 
 export default function RewardsPage() {
   usePageTitle('Loyalty Rewards');
   const router = useRouter();
-  const { currentOrganization } = useOrganization();
+  const { currentOrganization, branches } = useOrganization();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -78,8 +81,34 @@ export default function RewardsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Note: Using mock data until rewards API is implemented in backend
-  const rewards = mockLoyaltyRewards;
+  // Real data from database
+  const [rewards, setRewards] = useState<LoyaltyReward[]>([]);
+  const [tiers, setTiers] = useState<LoyaltyTier[]>([]);
+  const [_loading, setLoading] = useState(true);
+
+  // Load data from database
+  useEffect(() => {
+    const loadData = async () => {
+      if (!currentOrganization) return;
+
+      try {
+        setLoading(true);
+        const [rewardsData, tiersData] = await Promise.all([
+          loyaltyService.getRewards(currentOrganization.id),
+          loyaltyService.getTiers(currentOrganization.id)
+        ]);
+        
+        setRewards(rewardsData);
+        setTiers(tiersData);
+      } catch (error) {
+        console.error('Error loading loyalty data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [currentOrganization]);
 
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -94,12 +123,20 @@ export default function RewardsPage() {
     let filtered = rewards.filter(reward => {
       const matchesSearch = reward.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (reward.description && reward.description.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesStatus = statusFilter === 'all' || reward.status === statusFilter;
-      const matchesType = typeFilter === 'all' || reward.type === typeFilter;
-      const matchesBranch = branchFilter === 'all' ||
-                          reward.branchScope === 'All' ||
-                          (Array.isArray(reward.branchScope) && reward.branchScope.includes(branchFilter));
-      const matchesTier = tierFilter === 'all' || reward.applicableTiers.includes(tierFilter);
+      
+      // Status filter based on is_active and validity dates
+      const isActive = reward.is_active;
+      const isExpired = reward.valid_until && new Date(reward.valid_until) < new Date();
+      const currentStatus = !isActive ? 'Inactive' : isExpired ? 'Expired' : 'Active';
+      const matchesStatus = statusFilter === 'all' || currentStatus.toLowerCase() === statusFilter.toLowerCase();
+      
+      const matchesType = typeFilter === 'all' || reward.reward_type === typeFilter;
+      
+      // For now, assume all rewards apply to all branches (can be enhanced later)
+      const matchesBranch = branchFilter === 'all';
+      
+      // For now, assume all rewards apply to all tiers (can be enhanced later)  
+      const matchesTier = tierFilter === 'all';
 
       return matchesSearch && matchesStatus && matchesType && matchesBranch && matchesTier;
     });
@@ -115,24 +152,24 @@ export default function RewardsPage() {
             bValue = b.name;
             break;
           case 'type':
-            aValue = a.type;
-            bValue = b.type;
+            aValue = a.reward_type;
+            bValue = b.reward_type;
             break;
           case 'points':
-            aValue = a.pointsRequired;
-            bValue = b.pointsRequired;
+            aValue = a.points_required || 0;
+            bValue = b.points_required || 0;
             break;
           case 'status':
-            aValue = a.status;
-            bValue = b.status;
+            aValue = a.is_active ? 'Active' : 'Inactive';
+            bValue = b.is_active ? 'Active' : 'Inactive';
             break;
           case 'validity':
-            aValue = a.validityStartDate ? new Date(a.validityStartDate).getTime() : 0;
-            bValue = b.validityStartDate ? new Date(b.validityStartDate).getTime() : 0;
+            aValue = a.valid_from ? new Date(a.valid_from).getTime() : 0;
+            bValue = b.valid_from ? new Date(b.valid_from).getTime() : 0;
             break;
           case 'branchScope':
-            aValue = Array.isArray(a.branchScope) ? a.branchScope.length : 0;
-            bValue = Array.isArray(b.branchScope) ? b.branchScope.length : 0;
+            aValue = 0; // All rewards apply to all branches for now
+            bValue = 0;
             break;
           default:
             return 0;
@@ -257,7 +294,7 @@ export default function RewardsPage() {
             <Select.Trigger placeholder="Filter by tier..." />
             <Select.Content>
               <Select.Item value="all">All Tiers</Select.Item>
-              {membershipTiers.map(tier => (
+              {tiers.map(tier => (
                   <Select.Item key={tier.id} value={tier.id}>{tier.name}</Select.Item>
               ))}
             </Select.Content>
@@ -361,7 +398,7 @@ export default function RewardsPage() {
                 {formatDateRange(reward.validityStartDate, reward.validityEndDate)}
               </Table.Cell>
               <Table.Cell>
-                {formatBranchScope(reward.branchScope)}
+                {formatBranchScope(reward.branchScope, branches)}
               </Table.Cell>
               <Table.Cell>
                 <Flex gap="3">

@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Badge, Box, Button, Flex, Select, Table, Text, TextField, IconButton } from '@radix-ui/themes';
-import { Edit, RefreshCcw, Search } from 'lucide-react';
-import { mockRoles } from '@/data/RolesPermissionsData';
+import { Edit, RefreshCcw, Search, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAdminData } from '@/hooks/useAdminData';
+import type { Database } from '@/lib/supabase/database.types';
 import Pagination from '@/components/common/Pagination';
+import { Spinner } from '@radix-ui/themes';
+
+type Role = Database['public']['Tables']['roles']['Row'];
 
 export default function RoleList() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,6 +17,9 @@ export default function RoleList() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const router = useRouter();
+
+  // Get real roles data from useAdminData hook
+  const { roles, loading, error, refetchRoles } = useAdminData();
 
   // Check if any filter is active
   const isFilterActive = searchTerm !== '' || accessScopeFilter !== 'all';
@@ -26,18 +33,21 @@ export default function RoleList() {
 
   // Filter roles based on search term and filters
   const filteredRoles = useMemo(() => {
-    return mockRoles.filter(role => {
+    if (!roles || roles.length === 0) return [];
+    
+    return roles.filter(role => {
       // Search term filter (name or description)
       const matchesSearch = 
-        role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        role.description.toLowerCase().includes(searchTerm.toLowerCase());
+        (role.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        (role.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false);
       
-      // Access Scope filter
-      const matchesAccessScope = accessScopeFilter === 'all' || role.accessScope === accessScopeFilter;
+      // Access Scope filter - for now, show all roles as we don't have accessScope field
+      // This can be enhanced when the database schema is updated to include access scope
+      const matchesAccessScope = accessScopeFilter === 'all' || true;
       
       return matchesSearch && matchesAccessScope;
     });
-  }, [searchTerm, accessScopeFilter]);
+  }, [roles, searchTerm, accessScopeFilter]);
 
   // Pagination
   const totalPages = Math.ceil(filteredRoles.length / itemsPerPage);
@@ -49,6 +59,44 @@ export default function RoleList() {
   const handleEditRole = (roleId: string) => {
     router.push(`/admin-settings/roles-permissions/${roleId}`);
   };
+
+  // Handle refresh data
+  const handleRefreshData = async () => {
+    try {
+      await refetchRoles();
+    } catch (err) {
+      console.error('Failed to refresh roles:', err);
+    }
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <Box>
+        <Flex direction="column" align="center" justify="center" gap="4" style={{ minHeight: '200px' }}>
+          <Spinner size="3" />
+          <Text color="gray">Loading roles...</Text>
+        </Flex>
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Box>
+        <Flex direction="column" align="center" justify="center" gap="4" style={{ minHeight: '200px' }}>
+          <AlertCircle size={48} color="red" />
+          <Text color="red" size="4" weight="medium">Failed to load roles</Text>
+          <Text color="gray" size="2">{error.message}</Text>
+          <Button onClick={handleRefreshData} variant="soft">
+            <RefreshCcw size={16} />
+            Retry
+          </Button>
+        </Flex>
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -91,6 +139,10 @@ export default function RoleList() {
               <RefreshCcw size={16} />
               Reset Filters
             </Button>
+
+            <Button onClick={handleRefreshData} variant="ghost">
+              <RefreshCcw size={16} />
+            </Button>
           </Flex>
         </Flex>
         
@@ -100,8 +152,8 @@ export default function RoleList() {
             <Table.Row>
               <Table.ColumnHeaderCell>Role Name</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell>Description</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Assigned Users</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Access Level</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>System Role</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>Created</Table.ColumnHeaderCell>
               <Table.ColumnHeaderCell align="center">Actions</Table.ColumnHeaderCell>
             </Table.Row>
           </Table.Header>
@@ -113,16 +165,18 @@ export default function RoleList() {
                   <Table.Cell>
                     <Text weight="medium" as="div">{role.name}</Text>
                   </Table.Cell>
-                  <Table.Cell>{role.description}</Table.Cell>
-                  <Table.Cell>{role.assignedUsers}</Table.Cell>
                   <Table.Cell>
-                    <Badge color={
-                      role.accessScope === 'HQ' ? 'blue' : 
-                      role.accessScope === 'Region' ? 'purple' : 
-                      'green'
-                    }>
-                      {role.accessScope}
+                    <Text color="gray" size="2">{role.description || 'No description'}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge color={role.is_system_role ? 'blue' : 'gray'}>
+                      {role.is_system_role ? 'System' : 'Custom'}
                     </Badge>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text color="gray" size="2">
+                      {role.created_at ? new Date(role.created_at).toLocaleDateString() : 'Unknown'}
+                    </Text>
                   </Table.Cell>
                   <Table.Cell align="center">
                     <Flex gap="3" justify="center">
@@ -143,7 +197,23 @@ export default function RoleList() {
             ) : (
               <Table.Row>
                 <Table.Cell colSpan={5}>
-                  <Text align="center" color="gray">No roles found matching your filters</Text>
+                  <Flex direction="column" align="center" justify="center" gap="2" style={{ padding: '2rem' }}>
+                    <Text align="center" color="gray">
+                      {searchTerm || accessScopeFilter !== 'all' 
+                        ? 'No roles found matching your filters' 
+                        : 'No roles created yet'
+                      }
+                    </Text>
+                    {!searchTerm && accessScopeFilter === 'all' && (
+                      <Button 
+                        size="2" 
+                        variant="soft" 
+                        onClick={() => router.push('/admin-settings/roles-permissions/new')}
+                      >
+                        Create First Role
+                      </Button>
+                    )}
+                  </Flex>
                 </Table.Cell>
               </Table.Row>
             )}
@@ -151,19 +221,21 @@ export default function RoleList() {
         </Table.Root>
         
         {/* Pagination */}
-        <Pagination 
-          currentPage={currentPage}
-          totalPages={totalPages}
-          itemsPerPage={itemsPerPage}
-          totalItems={filteredRoles.length}
-          startIndex={startIndex}
-          endIndex={endIndex}
-          onPageChange={setCurrentPage}
-          onItemsPerPageChange={(newSize) => {
-            setItemsPerPage(newSize);
-            setCurrentPage(1);
-          }}
-        />
+        {filteredRoles.length > 0 && (
+          <Pagination 
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredRoles.length}
+            startIndex={startIndex}
+            endIndex={Math.min(endIndex, filteredRoles.length)}
+            onPageChange={setCurrentPage}
+            onItemsPerPageChange={(newSize) => {
+              setItemsPerPage(newSize);
+              setCurrentPage(1);
+            }}
+          />
+        )}
       </Flex>
     </Box>
   );

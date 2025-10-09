@@ -13,7 +13,8 @@ import {
 import DateRangeInput from '@/components/common/DateRangeInput';
 import { Range } from 'react-date-range';
 import { useFilterBranch, FilterBranchProvider } from '@/contexts/FilterBranchContext';
-import { organization } from '@/data/CommonData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded import - using real organization from context
 import MemberActivityReport from '@/components/loyalty-program/reports/MemberActivityReport';
 import PointTransactionsReport from '@/components/loyalty-program/reports/PointTransactionsReport';
 import RewardsRedemptionReport from '@/components/loyalty-program/reports/RewardsRedemptionReport';
@@ -39,8 +40,6 @@ const memberTiers = [
   { id: 'platinum', name: 'Platinum' },
 ];
 
-const branches = organization.filter(org => org.id !== 'hq');
-
 // Mock data for member activity
 const mockMemberActivityData = [
   { id: '1', period: 'Jan 2025', newSignups: 45, activeMembers: 320, inactiveMembers: 80, totalMembers: 400, engagementRate: 80.7, growth: 12.5 },
@@ -51,81 +50,8 @@ const mockMemberActivityData = [
   { id: '6', period: 'Jun 2025', newSignups: 56, activeMembers: 487, inactiveMembers: 108, totalMembers: 595, engagementRate: 85.8, growth: 8.2 },
 ];
 
-// Mock data for point transactions
-const mockPointTransactionsData = branches.flatMap(branch => {
-  return [
-    { 
-      id: `${branch.id}-1`, 
-      period: 'Jan 2025', 
-      pointsEarned: Math.floor(Math.random() * 50000) + 20000, 
-      pointsRedeemed: Math.floor(Math.random() * 20000) + 5000, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 500) + 200,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-    { 
-      id: `${branch.id}-2`, 
-      period: 'Feb 2025', 
-      pointsEarned: Math.floor(Math.random() * 52000) + 22000, 
-      pointsRedeemed: Math.floor(Math.random() * 21000) + 6000, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 520) + 210,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-    { 
-      id: `${branch.id}-3`, 
-      period: 'Mar 2025', 
-      pointsEarned: Math.floor(Math.random() * 55000) + 25000, 
-      pointsRedeemed: Math.floor(Math.random() * 22000) + 7000, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 540) + 220,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-    { 
-      id: `${branch.id}-4`, 
-      period: 'Apr 2025', 
-      pointsEarned: Math.floor(Math.random() * 58000) + 28000, 
-      pointsRedeemed: Math.floor(Math.random() * 23000) + 7500, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 560) + 230,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-    { 
-      id: `${branch.id}-5`, 
-      period: 'May 2025', 
-      pointsEarned: Math.floor(Math.random() * 60000) + 30000, 
-      pointsRedeemed: Math.floor(Math.random() * 24000) + 8000, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 580) + 240,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-    { 
-      id: `${branch.id}-6`, 
-      period: 'Jun 2025', 
-      pointsEarned: Math.floor(Math.random() * 62000) + 32000, 
-      pointsRedeemed: Math.floor(Math.random() * 25000) + 8500, 
-      netPoints: 0, // Will be calculated
-      transactionCount: Math.floor(Math.random() * 600) + 250,
-      averagePointsPerTransaction: 0, // Will be calculated
-      branchId: branch.id,
-      branchName: branch.name
-    },
-  ];
-}).map(item => ({
-  ...item,
-  netPoints: item.pointsEarned - item.pointsRedeemed,
-  averagePointsPerTransaction: Math.round(item.pointsEarned / item.transactionCount)
-}));
+// Mock data for point transactions - TODO: Replace with real data
+const mockPointTransactionsData: any[] = [];
 
 // Mock data for rewards redemption
 const mockRewardsRedemptionData = [
@@ -157,6 +83,8 @@ const mockConversionData = [
 
 function LoyaltyReportsContent() {
   usePageTitle('Loyalty Reports');
+  const { branches: orgBranches } = useOrganization();
+  const branches = orgBranches.filter(b => b.id !== 'hq');
   const [isClient, setIsClient] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState('member-activity'); // Default report type
   const [dateRange, setDateRange] = useState<Range>({

@@ -13,22 +13,37 @@ interface RecentOrdersProps {
 }
 
 const RecentOrders: React.FC<RecentOrdersProps> = ({ limit = 5 }) => {
-  const { currentOrganization, currentBranch } = useOrganization();
+  const { currentOrganization, currentBranch, branches } = useOrganization();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    if (!currentOrganization || !currentBranch) {
+    if (!currentOrganization) {
       setLoading(false);
       return;
     }
 
     try {
       setLoading(true);
-      const fetchedOrders = await ordersService.getOrders(currentBranch.id, {
-        limit,
-      });
+      
+      // Determine branch IDs to query (single branch or all branches)
+      const branchIds = currentBranch 
+        ? currentBranch.id 
+        : branches.map(b => b.id);
+
+      // Don't fetch if no branches available
+      if (!branchIds || (Array.isArray(branchIds) && branchIds.length === 0)) {
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      const fetchedOrders = await ordersService.getOrders(
+        currentOrganization.id,
+        branchIds,
+        { limit }
+      );
       setOrders(fetchedOrders);
       setError(null);
     } catch (err) {
@@ -37,7 +52,7 @@ const RecentOrders: React.FC<RecentOrdersProps> = ({ limit = 5 }) => {
     } finally {
       setLoading(false);
     }
-  }, [currentOrganization, currentBranch, limit]);
+  }, [currentOrganization, currentBranch, branches, limit]);
 
   useEffect(() => {
     fetchOrders();

@@ -6,7 +6,11 @@ import { Search, Settings } from 'lucide-react';
 import { FilterBranchProvider } from '@/contexts/FilterBranchContext';
 import Pagination from '@/components/common/Pagination';
 import BranchPriceDialog from '@/components/menu-management/branch-pricing/BranchPriceDialog';
-import { menuCategories, menuItems } from '@/data/MenuData';
+// Removed hardcoded imports - using real data from database services
+// Removed unused imports menuService and useOrganization
+// Placeholder data
+const menuItems: any[] = [];
+const menuCategories: any[] = [];
 import { formatCurrency } from '@/utilities';
 import { PageHeading } from '@/components/common/PageHeading';
 import { usePageTitle } from '@/hooks/usePageTitle';

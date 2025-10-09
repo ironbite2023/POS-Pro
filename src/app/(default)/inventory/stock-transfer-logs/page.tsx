@@ -10,8 +10,11 @@ import {
   TextField,
 } from '@radix-ui/themes';
 import { Search, RefreshCcw } from 'lucide-react';
-import { organization } from '@/data/CommonData';
-import { StockTransferLog, mockTransferLogs } from '@/data/StockTransferLogData';
+import { useOrganization } from '@/contexts/OrganizationContext';
+// Removed hardcoded imports - using real data from database services
+// Placeholder types and data
+import { StockTransferLog } from '@/types/inventory';
+const mockTransferLogs: StockTransferLog[] = [];
 import StockTransferLogsTable from '@/components/inventory/StockTransferLogsTable';
 import Pagination from '@/components/common/Pagination';
 import { useRouter } from 'next/navigation';
@@ -21,6 +24,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 const ITEMS_PER_PAGE = 10;
 
 function StockTransferLogsContent() {
+  const { branches } = useOrganization();
   const [allTransferLogs] = useState<StockTransferLog[]>(mockTransferLogs);
   const [filteredLogs, setFilteredLogs] = useState<StockTransferLog[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,8 +46,8 @@ function StockTransferLogsContent() {
       const term = searchTerm.toLowerCase();
       result = result.filter(log => 
         log.transferNumber.toLowerCase().includes(term) ||
-        organization.find(org => org.id === log.originId)?.name.toLowerCase().includes(term) ||
-        organization.find(org => org.id === log.destinationId)?.name.toLowerCase().includes(term)
+        branches.find(b => b.id === log.originId)?.name.toLowerCase().includes(term) ||
+        branches.find(b => b.id === log.destinationId)?.name.toLowerCase().includes(term)
       );
     }
     
@@ -71,7 +75,7 @@ function StockTransferLogsContent() {
     
     setFilteredLogs(result);
     setCurrentPage(1);
-  }, [allTransferLogs, searchTerm, statusFilter, originFilter, destinationFilter, discrepancyFilter]);
+  }, [allTransferLogs, searchTerm, statusFilter, originFilter, destinationFilter, discrepancyFilter, branches]);
 
   // Handle view details button click
   const handleViewDetails = (log: StockTransferLog) => {
@@ -138,9 +142,9 @@ function StockTransferLogsContent() {
               <Select.Trigger placeholder="All Origins" />
               <Select.Content>
                 <Select.Item value="all">All Origins</Select.Item>
-                {organization.map(org => (
-                  <Select.Item key={org.id} value={org.id}>
-                    {org.name}
+                {branches.map(branch => (
+                  <Select.Item key={branch.id} value={branch.id}>
+                    {branch.name}
                   </Select.Item>
                 ))}
               </Select.Content>
@@ -153,9 +157,9 @@ function StockTransferLogsContent() {
               <Select.Trigger placeholder="All Destinations" />
               <Select.Content>
                 <Select.Item value="all">All Destinations</Select.Item>
-                {organization.map(org => (
-                  <Select.Item key={org.id} value={org.id}>
-                    {org.name}
+                {branches.map(branch => (
+                  <Select.Item key={branch.id} value={branch.id}>
+                    {branch.name}
                   </Select.Item>
                 ))}
               </Select.Content>
@@ -188,7 +192,7 @@ function StockTransferLogsContent() {
 
       <StockTransferLogsTable
         transferLogs={paginatedLogs}
-        onViewDetails={handleViewDetails}
+        onRowClick={handleViewDetails}
       />
 
       {filteredLogs.length > 0 && (

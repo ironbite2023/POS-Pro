@@ -70,22 +70,17 @@ export const useInventoryData = (): UseInventoryDataReturn => {
     if (!currentOrganization || !currentBranch) return;
 
     try {
-      // Get movements for all items in the branch (limit to recent 50)
-      const allMovements: InventoryMovement[] = [];
-      for (const item of items.slice(0, 10)) {
-        const itemMovements = await inventoryService.getItemMovements(
-          item.id,
-          currentBranch.id,
-          5
-        );
-        allMovements.push(...itemMovements);
-      }
-      setMovements(allMovements.slice(0, 50));
+      // OPTIMIZED: Single database query instead of sequential loop
+      const movementsData = await inventoryService.getRecentMovements(
+        currentBranch.id,
+        50 // limit to 50 most recent movements
+      );
+      setMovements(movementsData);
     } catch (err) {
       console.error('Error fetching inventory movements:', err);
       throw err;
     }
-  }, [currentOrganization, currentBranch, items]);
+  }, [currentOrganization, currentBranch]);
 
   const fetchAllData = useCallback(async () => {
     if (!currentOrganization) return;
@@ -94,13 +89,27 @@ export const useInventoryData = (): UseInventoryDataReturn => {
       setLoading(true);
       setError(null);
 
+      // Fetch all data in parallel for better performance
       await Promise.all([
         fetchInventoryItems(),
         fetchBranchInventory(),
+        fetchInventoryMovements()
       ]);
 
-      // Calculate metrics after data is loaded
-      if (currentBranch) {
+    } catch (err) {
+      console.error('Error fetching inventory data:', err);
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentOrganization, fetchInventoryItems, fetchBranchInventory, fetchInventoryMovements]);
+
+  // Calculate metrics whenever data changes
+  useEffect(() => {
+    const calculateMetrics = async () => {
+      if (!currentBranch || loading) return;
+
+      try {
         const lowStockItems = await inventoryService.getLowStockItems(currentBranch.id);
         
         const totalValue = branchInventory.reduce((sum, inv) => {
@@ -121,19 +130,18 @@ export const useInventoryData = (): UseInventoryDataReturn => {
           totalValue,
           recentMovements,
         });
+      } catch (err) {
+        console.error('Error calculating metrics:', err);
       }
-    } catch (err) {
-      console.error('Error fetching inventory data:', err);
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentOrganization, currentBranch, fetchInventoryItems, fetchBranchInventory, branchInventory, movements, items.length]);
+    };
 
+    calculateMetrics();
+  }, [currentBranch, branchInventory, movements, items.length, loading]);
+
+  // Main data fetching effect with proper dependency
   useEffect(() => {
     fetchAllData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrganization?.id, currentBranch?.id]);
+  }, [fetchAllData]);
 
   return {
     items,

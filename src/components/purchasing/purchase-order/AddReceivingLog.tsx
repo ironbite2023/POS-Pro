@@ -2,11 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import { Dialog, TextField, Button, Flex, Grid, Text, Box, TextArea, Select, IconButton } from '@radix-ui/themes';
-import { PurchaseOrderItem, ReceivingLog } from '@/data/PurchaseOrderData';
+// Removed hardcoded imports - using real data from database services
+import type { Database } from '@/lib/supabase/database.types';
+
+type PurchaseOrderItem = Database['public']['Tables']['purchase_order_items']['Row'];
 import { v4 as uuidv4 } from 'uuid';
 import DateInput from '@/components/common/DateInput';
 import SearchableSelect from '@/components/common/SearchableSelect';
 import { X, Save } from 'lucide-react';
+
+// Receiving Log type for purchase order receiving tracking
+interface ReceivingLog {
+  id: string;
+  date: string;
+  quantityReceived: number;
+  receivedBy: string;
+  notes?: string;
+  itemName: string;
+  itemSku: string;
+  expiryDate?: string;
+  storageLocation?: string;
+}
 
 interface AddReceivingLogFormData {
   date: string;
@@ -97,8 +113,8 @@ export default function AddReceivingLog({
         quantityReceived: formData.quantityReceived,
         receivedBy: formData.receivedBy,
         notes: formData.notes,
-        itemName: selectedItem.itemName,
-        itemSku: selectedItem.id.split('-')[0] || 'N/A', // Using the first part of ID as SKU for demo
+        itemName: selectedItem.inventory_item_id || 'Unknown Item', // TODO: Load actual item name from inventory
+        itemSku: selectedItem.inventory_item_id?.split('-')[0] || 'N/A',
         expiryDate: formData.expiryDate,
         storageLocation: formData.storageLocation
       };
@@ -127,7 +143,7 @@ export default function AddReceivingLog({
             <SearchableSelect
               options={availableItems.map(item => ({
                 value: item.id,
-                label: item.itemName
+                label: `Item ${item.inventory_item_id || item.id}` // TODO: Load actual item names from inventory
               }))}
               value={formData.selectedItemId}
               onChange={(selectedItem) => setFormData({ ...formData, selectedItemId: selectedItem as string })}              

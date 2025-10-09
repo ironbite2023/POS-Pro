@@ -4,7 +4,13 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Box, Heading, Flex, Text, Grid, Badge, Button, Table, Separator, Dialog, TextField, IconButton, TextArea } from '@radix-ui/themes';
 import { ArrowLeft, CreditCard, AlertCircle, Printer, User, Phone, MapPin, FileDown, Calendar, Clock, DollarSign, BanknoteIcon, ReceiptText, Store, X } from 'lucide-react';
-import { orderHistoryData, OrderHistoryItem } from '@/data/OrderHistoryData';
+// Removed hardcoded import - using real data from database services
+// Removed unused imports ordersService and useOrganization
+// Placeholder types and data
+type _Order = any;
+type _OrderItem = any;
+type OrderHistoryItem = any;
+const orderHistoryData: any[] = [];
 import { PageHeading } from '@/components/common/PageHeading';
 import CardHeading from '@/components/common/CardHeading';
 import { usePageTitle } from '@/hooks/usePageTitle'

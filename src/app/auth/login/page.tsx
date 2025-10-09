@@ -1,17 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Box, Container, Flex, Heading, Text, Button, Link, Card, IconButton, TextField } from '@radix-ui/themes';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import Image from 'next/image';
 import { useTheme } from 'next-themes';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
-export default function LoginPage() {
-  usePageTitle('Login');
+function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,6 +18,16 @@ export default function LoginPage() {
   const { theme } = useTheme();
   const { signIn } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Handle redirect messages and returnTo parameter
+  useEffect(() => {
+    const message = searchParams.get('message');
+    
+    if (message) {
+      toast.info(message);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +36,11 @@ export default function LoginPage() {
     try {
       await signIn(email, password);
       toast.success('Login successful!');
-      router.push('/');
+      
+      // Redirect to returnTo URL if available, otherwise go to dashboard
+      const returnTo = searchParams.get('returnTo');
+      const redirectUrl = returnTo || '/';
+      router.push(redirectUrl);
     } catch (error: any) {
       console.error('Login failed:', error);
       toast.error(error.message || 'Login failed. Please check your credentials.');
@@ -163,5 +176,19 @@ export default function LoginPage() {
         </Box>
       </Flex>
     </Flex>
+  );
+}
+
+export default function LoginPage() {
+  usePageTitle('Login');
+  
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 } 

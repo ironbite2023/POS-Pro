@@ -4,12 +4,30 @@ import React, { useState, useEffect } from 'react';
 import { Box, Button, Flex, Tabs, Text, Badge, AlertDialog } from '@radix-ui/themes';
 import { ArrowLeft, Save, User, Shield, Activity, X, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { mockUsers } from '@/data/UserData';
-import { User as UserType } from '@/data/UserData';
+// Removed hardcoded imports - using real data from database services
+import { staffService, type StaffMember } from '@/lib/services';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Database } from '@/lib/supabase/database.types';
+import { supabase } from '@/lib/supabase/client';
+
+type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 import { PageHeading } from '@/components/common/PageHeading';
 import ProfileInfoTab from './tabs/ProfileInfoTab';
 import RolesAccessTab from './tabs/RolesAccessTab';
 import ActivityLogTab from './tabs/ActivityLogTab';
+
+// Extended user type with additional properties
+interface ExtendedUser extends UserProfile {
+  firstName?: string;
+  lastName?: string;
+  avatar?: string;
+  role?: string;
+  region?: string;
+  branches?: string[];
+  canViewOwnReports?: boolean;
+  canEditInventory?: boolean;
+  activityLog?: Array<{ timestamp: string; action: string }>;
+}
 
 interface UserEditFormProps {
   userId: string;
@@ -18,21 +36,38 @@ interface UserEditFormProps {
 
 export default function UserEditForm({ userId, onDelete }: UserEditFormProps) {
   const [activeTab, setActiveTab] = useState('profile');
-  const [user, setUser] = useState<UserType | null>(null);
+  const [user, setUser] = useState<ExtendedUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const router = useRouter();
   
   // Load user data
   useEffect(() => {
-    // In a real app, this would be an API call
-    const foundUser = mockUsers.find(u => u.id === userId);
-    if (foundUser) {
-      setUser(foundUser);
-    } else {
-      // Redirect if user not found
-      router.push('/admin-settings/users');
-    }
+    const loadUser = async () => {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (error || !data) {
+        console.error('Error loading user:', error);
+        router.push('/admin-settings/users');
+        return;
+      }
+      
+      // Map database fields to extended fields
+      setUser({
+        ...data,
+        firstName: data.first_name,
+        lastName: data.last_name,
+        avatar: data.avatar_url,
+        branches: [],
+        activityLog: []
+      });
+    };
+    
+    loadUser();
   }, [userId, router]);
   
   if (!user) {
@@ -40,21 +75,37 @@ export default function UserEditForm({ userId, onDelete }: UserEditFormProps) {
   }
   
   // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+    
     setIsLoading(true);
     
-    // In a real app, this would be an API call to update the user
-    console.log('Updating user:', user);
-    
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          first_name: user.firstName || user.first_name,
+          last_name: user.lastName || user.last_name,
+          avatar_url: user.avatar || user.avatar_url,
+          phone: user.phone,
+          status: user.status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
       router.push('/admin-settings/users');
-    }, 500);
+    } catch (error) {
+      console.error('Error saving user:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Handle user data updates from child components
-  const handleUserUpdate = (updates: Partial<UserType>) => {
+  const handleUserUpdate = (updates: Partial<ExtendedUser>) => {
     setUser(prev => {
       if (!prev) return null;
       return {
@@ -80,14 +131,14 @@ export default function UserEditForm({ userId, onDelete }: UserEditFormProps) {
     <Box>
       <Flex justify="between" gap="3" mb="5">
         <PageHeading
-          title={`Edit ${user.name}`}
+          title={`Edit ${user.firstName || user.first_name} ${user.lastName || user.last_name}`}
           description="Manage user details, roles, and access permissions"
           showBackButton
           onBackClick={handleCancel}
           noMarginBottom
           badge={
             <Flex gap="2">
-              <Badge color="gray">{user.role}</Badge>
+              <Badge color="gray">{user.role || 'No Role'}</Badge>
               <Badge color={user.status === 'active' ? 'green' : 'red'} className="capitalize">{user.status}</Badge>
             </Flex>
           }

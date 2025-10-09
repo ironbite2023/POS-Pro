@@ -18,19 +18,22 @@ interface UseRealtimeOrdersReturn {
 }
 
 export const useRealtimeOrders = (statusFilter?: string[]): UseRealtimeOrdersReturn => {
-  const { currentBranch } = useOrganization();
+  const { currentOrganization, currentBranch } = useOrganization();
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchOrders = useCallback(async () => {
-    if (!currentBranch?.id) return;
+    if (!currentOrganization?.id || !currentBranch?.id) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const liveOrders = await ordersService.getLiveOrders(currentBranch.id);
+      const liveOrders = await ordersService.getLiveOrders(
+        currentOrganization.id,
+        currentBranch.id
+      );
       
       // Apply status filter if provided
       const filteredOrders = statusFilter && statusFilter.length > 0
@@ -44,7 +47,7 @@ export const useRealtimeOrders = (statusFilter?: string[]): UseRealtimeOrdersRet
     } finally {
       setLoading(false);
     }
-  }, [currentBranch?.id, statusFilter]);
+  }, [currentOrganization?.id, currentBranch?.id, statusFilter]);
 
   useEffect(() => {
     fetchOrders();
