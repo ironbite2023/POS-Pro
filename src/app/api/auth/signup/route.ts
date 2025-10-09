@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase/client';
+import { getAdminClient } from '@/lib/supabase/client';
 import {
   isValidEmail,
   validatePasswordStrength,
@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let userId: string | undefined;
   let organizationId: string | undefined;
+
+  // Initialize admin client for server-side operations
+  const supabaseAdmin = getAdminClient();
 
   try {
     // ============================================

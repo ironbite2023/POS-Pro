@@ -16,6 +16,8 @@ let supabaseAdminInstance: SupabaseClient<Database> | null = null;
 /**
  * Get or create Supabase client for browser usage (with RLS)
  * Uses singleton pattern to prevent multiple instances
+ * CRITICAL FIX: Uses localStorage for client-side, cookies are server-only
+ * The issue was trying to sync cookies between client and server incorrectly
  */
 const getSupabaseClient = (): SupabaseClient<Database> => {
   if (!supabaseInstance) {
@@ -26,8 +28,10 @@ const getSupabaseClient = (): SupabaseClient<Database> => {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
-          storageKey: 'pos-pro-auth', // Custom storage key
+          detectSessionInUrl: true,
+          storageKey: 'pos-pro-auth',
           storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+          flowType: 'pkce', // Use PKCE flow for better security
         },
       }
     );
@@ -37,13 +41,17 @@ const getSupabaseClient = (): SupabaseClient<Database> => {
 
 /**
  * Get or create Supabase admin client for server-side operations (bypasses RLS)
- * Only use on server-side!
+ * Only use on server-side! NOT for browser use.
  */
 const getSupabaseAdmin = (): SupabaseClient<Database> => {
+  // Don't create admin client in browser to avoid "multiple instances" warning
+  if (typeof window !== 'undefined') {
+    console.warn('supabaseAdmin should not be used in browser context. Use supabase client instead.');
+    return getSupabaseClient();
+  }
+  
   if (!supabaseAdminInstance) {
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-                          process.env.SUPABASE_SERVICE_ROLE_KEY || 
-                          'placeholder-key';
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key';
                           
     supabaseAdminInstance = createClient<Database>(
       supabaseUrl,
@@ -52,6 +60,7 @@ const getSupabaseAdmin = (): SupabaseClient<Database> => {
         auth: {
           persistSession: false,
           autoRefreshToken: false,
+          storageKey: 'pos-pro-auth-admin', // Different key to avoid conflicts
         },
       }
     );
@@ -61,7 +70,41 @@ const getSupabaseAdmin = (): SupabaseClient<Database> => {
 
 // Export singleton instances
 export const supabase = getSupabaseClient();
-export const supabaseAdmin = getSupabaseAdmin();
+
+// ✅ FIX: Only export admin client on server-side to prevent browser instantiation
+// This prevents the "supabaseAdmin should not be used in browser context" warning
+export const supabaseAdmin = typeof window === 'undefined' 
+  ? getSupabaseAdmin() 
+  : null as unknown as SupabaseClient<Database>; // Type assertion for compatibility
+
+/**
+ * Safe getter for admin client with explicit error handling
+ * 
+ * @throws {Error} If called from browser context
+ * @returns {SupabaseClient<Database>} Admin client instance (bypasses RLS)
+ * 
+ * @example
+ * // ✅ CORRECT: Use in API routes or server components
+ * export async function POST(request: Request) {
+ *   const admin = getAdminClient();
+ *   await admin.auth.admin.createUser({...});
+ * }
+ * 
+ * @example
+ * // ❌ INCORRECT: Never use in client components
+ * 'use client';
+ * const admin = getAdminClient(); // Will throw error!
+ */
+export function getAdminClient(): SupabaseClient<Database> {
+  if (typeof window !== 'undefined') {
+    throw new Error(
+      '🚫 Admin client cannot be used in browser context.\n' +
+      '💡 Use this function only in API routes or server components.\n' +
+      '📖 For client-side operations, use the regular "supabase" client.'
+    );
+  }
+  return getSupabaseAdmin();
+}
 
 // Helper function to create a client with a user's access token
 export const createSupabaseClient = (accessToken?: string) => {

@@ -1,8 +1,8 @@
 Plan:
 
-As the Plan Agent, deconstruct the following request into a comprehensive implementation strategy. Your plan must logically outline all requirements, identify prerequisites and dependencies, provide a detailed step-by-step algorithm or pseudocode, and define clear success criteria.
+As the Plan Agent, generate a comprehensive 5-step implementation plan for the following request. Pay close attention to the multi-phase process required for the Actionable Implementation Plan section.
 
-Task: [TASK_DESCRIPTION]
+Request: [TASK_DESCRIPTION]
 
 Do:
 
@@ -14,3 +14,21 @@ Check:
 
 As the Check Agent, conduct a comprehensive audit of the implemented changes and code against the original implementation plan. Your analysis must rigorously verify functional correctness, identify security vulnerabilities, check for deviations from the plan, and flag violations of coding best practices.
 Generate a structured report detailing all findings.
+
+As the Debugger Agent, systematically diagnose the root cause of the following issue. Your analysis must pinpoint the root cause, propose a validated solution (which may include code, database, or configuration changes), and provide a clear explanation for why the fix works.
+
+Issue Report
+What went wrong?
+[Describe the problem in simple terms]
+
+URL:
+[Paste the full URL from your browser's address bar]
+
+Exact Error Message (if any):
+
+[Paste the full, exact error message here]
+Steps to Reproduce:
+[List the precise steps to trigger the bug]
+
+Expected Behavior:
+[Describe what should have happened]

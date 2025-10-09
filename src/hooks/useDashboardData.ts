@@ -204,8 +204,8 @@ export const useDashboardData = (timeRange: 'today' | 'week' | 'month' = 'today'
   useEffect(() => {
     fetchDashboardData();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchDashboardData, 30000);
+    // Refresh every 5 minutes for dashboard data (was 30 seconds - too aggressive)
+    const interval = setInterval(fetchDashboardData, 300000); // 5 minutes
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 

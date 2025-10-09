@@ -109,11 +109,25 @@ const ProtectedRouteContent: React.FC<ProtectedRouteProps> = ({
   fallback,
   redirectTo,
 }) => {
-  const { hasPermission, hasPermissions, loading } = usePermissions();
-  const { user, userProfile } = useAuth();
+  const { hasPermission, hasPermissions, loading: permissionsLoading } = usePermissions();
+  const { user, userProfile, loading: authLoading } = useAuth();
+  const router = useRouter();
 
-  // Show loading state while permissions are being loaded
-  if (loading) {
+  // Redirect effect for unauthenticated users
+  React.useEffect(() => {
+    if (!authLoading && !user) {
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '/';
+      router.push(`/auth/login?returnTo=${encodeURIComponent(currentPath)}`);
+    }
+  }, [authLoading, user, router]);
+
+  // Wait for BOTH auth AND permissions to finish loading
+  if (authLoading || permissionsLoading) {
+    return <LoadingComponent />;
+  }
+
+  // If not logged in, show loading while redirect happens
+  if (!user) {
     return <LoadingComponent />;
   }
 

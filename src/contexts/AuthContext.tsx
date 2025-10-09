@@ -125,8 +125,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const isExpiring = timeLeft <= 300 && timeLeft > 0;
         setIsSessionExpiring(isExpiring);
 
-        // Auto-refresh if session is about to expire (less than 2 minutes)
-        if (timeLeft <= 120 && timeLeft > 60) {
+        // Auto-refresh only ONCE when session has 2-3 minutes left
+        if (timeLeft <= 180 && timeLeft > 120) {
           console.log('Auto-refreshing session...');
           refreshSession().catch(console.error);
         }
@@ -136,7 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('Session expired, logging out...');
           signOut().catch(console.error);
         }
-      }, 30000); // Check every 30 seconds
+      }, 60000); // Check every 60 seconds (less aggressive)
     }
 
                        return () => {
